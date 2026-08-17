@@ -50,7 +50,7 @@ Your IAM user needs permission to call Rekognition. A starter policy is often `A
 Example:
 
 ```text
-/Users/mahmed2/Desktop/celeb-images
+~/Desktop/celeb-images
 ```
 
 Supported formats:
@@ -62,13 +62,13 @@ Supported formats:
 ## 4. Run the script
 
 ```bash
-python3 src/facerecognition_app/recognize_celebrities.py /Users/mahmed2/Desktop/celeb-images
+python3 src/facerecognition_app/recognize_celebrities.py ~/Desktop/celeb-images
 ```
 
 To also save all results to JSON:
 
 ```bash
-python3 src/facerecognition_app/recognize_celebrities.py /Users/mahmed2/Desktop/celeb-images --output results.json
+python3 src/facerecognition_app/recognize_celebrities.py ~/Desktop/celeb-images --output results.json
 ```
 
 ## Output
@@ -92,41 +92,41 @@ For each image, the script prints JSON with:
 Your spreadsheet can live anywhere on your Mac. For the file:
 
 ```text
-/Users/mahmed2/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx
+~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx
 ```
 
 and an output folder like:
 
 ```text
-/Users/mahmed2/Desktop/celeb-images/downloaded-images
+~/Desktop/celeb-images/downloaded-images
 ```
 
 run:
 
 ```bash
-/Users/mahmed2/face-recognition-app/.venv/bin/python src/facerecognition_app/download_images_from_xlsx.py \
-  "/Users/mahmed2/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx"
+.venv/bin/python src/facerecognition_app/download_images_from_xlsx.py \
+  "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx"
 ```
 
 This reads the first sheet, uses the `image_url` column for URLs, uses the `title` column to build readable filenames, and saves everything into:
 
 ```text
-/Users/mahmed2/Desktop/celeb-images/Gallery Images
+~/Desktop/celeb-images/Gallery Images
 ```
 
 To only process the first `10` data rows:
 
 ```bash
-/Users/mahmed2/face-recognition-app/.venv/bin/python src/facerecognition_app/download_images_from_xlsx.py \
-  "/Users/mahmed2/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx" \
+.venv/bin/python src/facerecognition_app/download_images_from_xlsx.py \
+  "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx" \
   --limit 10
 ```
 
 After the download finishes, run celebrity recognition on the downloaded folder:
 
 ```bash
-/Users/mahmed2/face-recognition-app/.venv/bin/python src/facerecognition_app/recognize_celebrities.py \
-  "/Users/mahmed2/Desktop/celeb-images/Gallery Images"
+.venv/bin/python src/facerecognition_app/recognize_celebrities.py \
+  "~/Desktop/celeb-images/Gallery Images"
 ```
 
 ## Incremental capture with saved raw Rekognition output
@@ -134,15 +134,15 @@ After the download finishes, run celebrity recognition on the downloaded folder:
 If you want to call the Rekognition API only once per new spreadsheet row and reuse the saved output later, run:
 
 ```bash
-PYTHONPATH=src /Users/mahmed2/face-recognition-app/.venv/bin/python src/facerecognition_app/capture_recognition_from_xlsx.py \
-  "/Users/mahmed2/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx"
+PYTHONPATH=src .venv/bin/python src/facerecognition_app/capture_recognition_from_xlsx.py \
+  "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx"
 ```
 
 To only capture the first `10` rows:
 
 ```bash
-PYTHONPATH=src /Users/mahmed2/face-recognition-app/.venv/bin/python src/facerecognition_app/capture_recognition_from_xlsx.py \
-  "/Users/mahmed2/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx" \
+PYTHONPATH=src .venv/bin/python src/facerecognition_app/capture_recognition_from_xlsx.py \
+  "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx" \
   --limit 10
 ```
 
@@ -164,21 +164,21 @@ To apply downstream rules offline:
 run:
 
 ```bash
-/Users/mahmed2/face-recognition-app/.venv/bin/python src/facerecognition_app/curate_recognition_results.py \
-  "/Users/mahmed2/Desktop/celeb-images/recognition_results.jsonl"
+.venv/bin/python src/facerecognition_app/curate_recognition_results.py \
+  "~/Desktop/celeb-images/recognition_results.jsonl"
 ```
 
 This writes:
 
 ```text
-/Users/mahmed2/Desktop/celeb-images/curated_recognition_results.json
+~/Desktop/celeb-images/curated_recognition_results.json
 ```
 
 You can override the confidence threshold:
 
 ```bash
-/Users/mahmed2/face-recognition-app/.venv/bin/python src/facerecognition_app/curate_recognition_results.py \
-  "/Users/mahmed2/Desktop/celeb-images/recognition_results.jsonl" \
+.venv/bin/python src/facerecognition_app/curate_recognition_results.py \
+  "~/Desktop/celeb-images/recognition_results.jsonl" \
   --min-confidence 75
 ```
 
