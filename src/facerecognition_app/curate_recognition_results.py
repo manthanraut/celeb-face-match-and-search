@@ -43,14 +43,24 @@ def celebrity_matches_title(celebrity_name: str, title: str) -> bool:
     return False
 
 
+def extract_title_subject(title: str) -> str:
+    parts = re.split(r"\s+in\s+", title, maxsplit=1, flags=re.IGNORECASE)
+    if not parts:
+        return ""
+    return parts[0].strip()
+
+
 def curate_record(record: dict, min_confidence: float) -> dict:
     source = record.get("source", {})
     title = source.get("title", "") or ""
+    title_subject = extract_title_subject(title)
     raw = record.get("rekognition_raw", {})
     celebrity_faces = raw.get("CelebrityFaces", []) or []
 
+    identified_celebs = []
     curated_matches = []
     discarded_matches = []
+    confident_rekognition_only = []
 
     for celebrity in celebrity_faces:
         name = celebrity.get("Name", "")
@@ -66,9 +76,30 @@ def curate_record(record: dict, min_confidence: float) -> dict:
         }
 
         if confidence >= min_confidence and title_match:
+            curated_celebrity["identification_source"] = "rekognition + title"
+            identified_celebs.append(curated_celebrity)
             curated_matches.append(curated_celebrity)
+        elif confidence >= min_confidence:
+            confident_rekognition_only.append(curated_celebrity)
+            discarded_matches.append(curated_celebrity)
         else:
             discarded_matches.append(curated_celebrity)
+
+    if not identified_celebs and title_subject:
+        identified_celebs.append(
+            {
+                "name": title_subject,
+                "id": None,
+                "match_confidence": None,
+                "title_match": True,
+                "urls": [],
+                "identification_source": "title only",
+            }
+        )
+    elif not identified_celebs and not title_subject and len(confident_rekognition_only) == 1:
+        rekognition_only_match = dict(confident_rekognition_only[0])
+        rekognition_only_match["identification_source"] = "rekognition only"
+        identified_celebs.append(rekognition_only_match)
 
     return {
         "status": record.get("status"),
@@ -79,6 +110,9 @@ def curate_record(record: dict, min_confidence: float) -> dict:
         "curation": {
             "min_confidence": min_confidence,
             "title_used": title,
+            "title_subject": title_subject,
+            "identified_celebs": identified_celebs,
+            "identification_count": len(identified_celebs),
             "matched_celebs": curated_matches,
             "discarded_celebs": discarded_matches,
             "matched_count": len(curated_matches),
@@ -91,13 +125,26 @@ def curate_record(record: dict, min_confidence: float) -> dict:
 def summarize(curated_records: list[dict]) -> dict:
     success_records = [record for record in curated_records if record.get("status") == "success"]
     matched_records = [
-        record for record in success_records if record.get("curation", {}).get("matched_count", 0) > 0
+        record for record in success_records if record.get("curation", {}).get("identification_count", 0) > 0
     ]
     return {
         "total_records": len(curated_records),
         "successful_records": len(success_records),
-        "records_with_verified_matches": len(matched_records),
-        "records_without_verified_matches": len(success_records) - len(matched_records),
+        "records_with_identification": len(matched_records),
+        "records_without_identification": len(success_records) - len(matched_records),
+        "records_with_verified_matches": len(
+            [record for record in success_records if record.get("curation", {}).get("matched_count", 0) > 0]
+        ),
+        "records_with_title_only_identification": len(
+            [
+                record
+                for record in success_records
+                if any(
+                    celeb.get("identification_source") == "title only"
+                    for celeb in record.get("curation", {}).get("identified_celebs", [])
+                )
+            ]
+        ),
         "error_records": len([record for record in curated_records if record.get("status") != "success"]),
     }
 

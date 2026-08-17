@@ -189,3 +189,31 @@ The curated output includes:
 - verified celebrity matches
 - discarded celebrity matches
 - errors, if any
+
+## Search curated results
+
+To search the curated file by celebrity name and get matching image URLs back:
+
+```bash
+.venv/bin/python src/facerecognition_app/search_curated_results.py \
+  ~/Desktop/celeb-images/curated_recognition_results.json \
+  "Rihanna"
+```
+
+This returns JSON with:
+
+- the query
+- number of matches
+- matching `image_url`
+- title
+- identification source
+- local image path
+
+To limit results:
+
+```bash
+.venv/bin/python src/facerecognition_app/search_curated_results.py \
+  ~/Desktop/celeb-images/curated_recognition_results.json \
+  "Rihanna" \
+  --limit 5
+```
