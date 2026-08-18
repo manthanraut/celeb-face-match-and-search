@@ -44,6 +44,10 @@ const celebrityIndexes: IndexDescription[] = [
     partialFilterExpression: { slug: { $type: "string" } },
     unique: true,
   },
+  {
+    key: { normalizedAliases: 1 },
+    name: "celebrities_normalized_aliases",
+  },
 ];
 
 const galleryUsageIndexes: IndexDescription[] = [
@@ -55,6 +59,22 @@ const galleryUsageIndexes: IndexDescription[] = [
   {
     key: { event: 1, year: 1, assetId: 1 },
     name: "gallery_usages_event_year_asset",
+  },
+  {
+    key: { published: 1, addedAt: -1, assetId: -1, galleryId: -1 },
+    name: "gallery_usages_published_recency",
+  },
+  {
+    key: { published: 1, event: 1, year: 1, addedAt: -1, assetId: -1, galleryId: -1 },
+    name: "gallery_usages_published_event_year_recency",
+  },
+  {
+    key: { published: 1, event: 1, addedAt: -1, assetId: -1, galleryId: -1 },
+    name: "gallery_usages_published_event_recency",
+  },
+  {
+    key: { published: 1, year: 1, addedAt: -1, assetId: -1, galleryId: -1 },
+    name: "gallery_usages_published_year_recency",
   },
 ];
 

@@ -7,7 +7,9 @@ import { MAX_ASSET_UPLOAD_FILE_SIZE_BYTES } from "../../shared/assets.js";
 import { createApp } from "../../server/app.js";
 import { ApiError } from "../../server/middleware/error-handler.js";
 import type { AssetRouteService } from "../../server/routes/assets.js";
+import { createUnusedGalleryRouteService } from "../helpers/gallery-route-service.js";
 import { startTestHttpServer } from "../helpers/http-server.js";
+import { createUnusedVersoSearchRouteService } from "../helpers/verso-search-route-service.js";
 
 const ASSET_ID = "64b000000000000000000001";
 const CLIENT_ASSET_ID = "f167c99c-9ad0-4f3d-aad4-bf19cbe15a90";
@@ -91,7 +93,9 @@ async function startAssetApi(assetService: AssetRouteService) {
     createApp({
       assetService,
       checkDatabaseReadiness: () => Promise.resolve(),
+      galleryService: createUnusedGalleryRouteService(),
       recognitionProvider: "aws-rekognition",
+      versoSearchService: createUnusedVersoSearchRouteService(),
     }),
   );
 }
