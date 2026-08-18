@@ -14,3 +14,8 @@ export interface CelebrityCatalogEntry {
 export interface CelebrityRepository {
   list(): Promise<CelebrityCatalogEntry[]>;
 }
+
+export interface CelebrityLookupRepository {
+  findByNormalizedIdentity(normalizedIdentity: string): Promise<CelebrityCatalogEntry[]>;
+  findBySlug(slug: string): Promise<CelebrityCatalogEntry | null>;
+}

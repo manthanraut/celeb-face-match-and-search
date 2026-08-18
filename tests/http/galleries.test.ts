@@ -4,6 +4,7 @@ import { createApp } from "../../server/app.js";
 import type { GalleryRouteService } from "../../server/routes/galleries.js";
 import { createUnusedAssetRouteService } from "../helpers/asset-route-service.js";
 import { startTestHttpServer } from "../helpers/http-server.js";
+import { createUnusedVersoSearchRouteService } from "../helpers/verso-search-route-service.js";
 
 const ASSET_ID = "64b000000000000000000001";
 
@@ -31,6 +32,7 @@ async function startGalleryApi(galleryService: GalleryRouteService) {
       checkDatabaseReadiness: () => Promise.resolve(),
       galleryService,
       recognitionProvider: "aws-rekognition",
+      versoSearchService: createUnusedVersoSearchRouteService(),
     }),
   );
 }
