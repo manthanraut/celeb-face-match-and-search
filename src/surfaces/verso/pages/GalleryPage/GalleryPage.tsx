@@ -27,8 +27,8 @@ const gallery = {
 
 export function GalleryPage() {
   return (
-    <article className="bg-white pb-24 text-neutral-950">
-      <header className="mx-auto max-w-[90rem] px-5 pb-12 pt-14 text-center sm:px-8 sm:pt-20 lg:pb-16 lg:pt-24">
+    <article className="bg-white pb-20 text-neutral-950">
+      <header className="mx-auto max-w-[80rem] px-5 pb-10 pt-12 text-center sm:px-8 sm:pt-14 lg:pb-12 lg:pt-16">
         <Link
           className="text-xs font-semibold uppercase tracking-[0.18em] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-950"
           to="/galleries/met-gala-2026"
@@ -36,15 +36,15 @@ export function GalleryPage() {
           {gallery.category}
         </Link>
 
-        <h1 className="font-editorial mx-auto mt-6 max-w-6xl text-balance text-5xl leading-[0.94] tracking-[-0.035em] sm:text-7xl lg:text-[6.75rem]">
+        <h1 className="font-editorial mx-auto mt-5 max-w-5xl text-balance text-4xl leading-[0.96] tracking-[-0.035em] sm:text-5xl lg:text-[4.75rem]">
           {gallery.title}
         </h1>
 
-        <p className="mx-auto mt-8 max-w-3xl text-pretty text-lg leading-8 text-neutral-700 sm:text-xl">
+        <p className="mx-auto mt-6 max-w-3xl text-pretty text-base leading-7 text-neutral-700 sm:text-lg">
           {gallery.description}
         </p>
 
-        <div className="mt-8 text-sm leading-6">
+        <div className="mt-6 text-sm leading-6">
           <p>
             By <span className="font-semibold">{gallery.author}</span>
           </p>
@@ -54,10 +54,10 @@ export function GalleryPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[43rem] px-5 pb-14 sm:px-8 sm:pb-20">
+      <div className="mx-auto max-w-[40rem] px-5 pb-12 sm:px-8 sm:pb-16">
         {gallery.introduction.map((paragraph) => (
           <p
-            className="mb-6 font-serif text-[1.2rem] leading-[1.75] text-neutral-800 last:mb-0 sm:text-[1.35rem]"
+            className="mb-5 font-serif text-lg leading-[1.7] text-neutral-800 last:mb-0 sm:text-xl"
             key={paragraph}
           >
             {paragraph}
@@ -69,25 +69,25 @@ export function GalleryPage() {
         aria-labelledby="gallery-search-title"
         className="border-y border-neutral-950 bg-[#ece8df]"
       >
-        <div className="mx-auto grid max-w-[90rem] gap-8 px-5 py-10 sm:px-8 sm:py-14 lg:grid-cols-[1fr_auto] lg:items-center lg:gap-16 lg:px-12">
+        <div className="mx-auto grid max-w-[80rem] gap-7 px-5 py-8 sm:px-8 sm:py-10 lg:grid-cols-[1fr_auto] lg:items-center lg:gap-12">
           <div className="min-w-0 max-w-3xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em]">
               AI-powered image discovery
             </p>
             <h2
-              className="font-editorial mt-3 text-balance text-4xl leading-none tracking-[-0.025em] sm:text-5xl"
+              className="font-editorial mt-3 text-balance text-3xl leading-none tracking-[-0.025em] sm:text-4xl"
               id="gallery-search-title"
             >
               Looking for a Particular Celebrity?
             </h2>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-neutral-700 sm:text-lg">
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-700 sm:text-base">
               Search the archive to find every photograph in which they appear—not just the
               images in this gallery.
             </p>
           </div>
 
           <Link
-            className="inline-flex min-h-12 w-full items-center justify-center bg-neutral-950 px-7 py-3 text-center text-sm font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-950 sm:w-fit"
+            className="inline-flex min-h-11 w-full items-center justify-center bg-neutral-950 px-6 py-2.5 text-center text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-950 sm:w-fit"
             to="/discover"
           >
             Explore celebrity photos
@@ -98,7 +98,7 @@ export function GalleryPage() {
         </div>
       </section>
 
-      <figure className="mx-auto mt-16 max-w-[75rem] px-0 sm:mt-20 sm:px-8">
+      <figure className="mx-auto mt-12 max-w-[68rem] px-0 sm:mt-16 sm:px-8">
         <div className="bg-neutral-100">
           <img
             alt={gallery.image.alt}

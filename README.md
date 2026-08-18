@@ -11,6 +11,8 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 
 - Responsive Met Gala 2026 editorial gallery
 - CTA from the gallery to celebrity image discovery
+- Copilot-simulated photo selection with drag and drop, multi-select, and preview cards
+- Copilot-style photo details, editable metadata, taxonomy, and crop previews
 - Placeholder routes for search, bookmarks, celebrity archives, and editor tools
 - React and Express served by one development process
 - Shared, validated recognition-result contract
@@ -27,10 +29,15 @@ Open application
     → Met Gala 2026 gallery
     → Explore Celebrity Photos CTA
     → Discover page placeholder
+
+Open /admin/photos/new
+    → Select one or more local photos
+    → Open Edit Photo in a new tab
+    → Review the Copilot-style photo details page
 ```
 
-The backend upload workflow and persisted asset model are ready. The editor UI, AWS
-recognition worker, search results, and celebrity archive are planned next.
+The backend upload workflow, persisted asset model, and Copilot interface are ready. The
+AWS recognition worker, search results, and celebrity archive are planned next.
 
 ## Technology
 
@@ -131,8 +138,8 @@ Stop the development server with `Ctrl+C`.
 | `/bookmarks` | Placeholder | Saved photographs |
 | `/admin` | Placeholder | Internal dashboard |
 | `/admin/photos` | Placeholder | Photo library |
-| `/admin/photos/new` | Placeholder | Photo upload and analysis form |
-| `/admin/photos/:assetId` | Placeholder | Photo and recognition details |
+| `/admin/photos/new` | Ready | Local image selection and preview-card grid |
+| `/admin/photos/:assetId` | Ready | Copilot-style photo metadata, taxonomy, and crop previews |
 | `/api/health` | Ready | API and provider health check |
 | `/api/ready` | Ready | MongoDB-backed application readiness check |
 | `GET /api/assets` | Ready | Paginated photo-library assets |
@@ -269,21 +276,36 @@ built React files from `dist/`.
 
 ```text
 celeb-face-match-and-search/
-├── src/                          # React application
-│   ├── app/                      # Providers, router, and application shell
-│   ├── pages/                    # Gallery and future feature pages
-│   └── styles/                   # Tailwind and global styles
-├── server/                       # Express API
+├── src/
+│   ├── app/                      # App composition, providers, and router
+│   ├── surfaces/
+│   │   ├── verso/                # Public gallery/discovery experience
+│   │   │   ├── VersoLayout.tsx
+│   │   │   └── pages/
+│   │   └── copilot/              # Internal editorial experience
+│   │       ├── CopilotLayout.tsx
+│   │       ├── components/
+│   │       └── pages/
+│   ├── features/
+│   │   └── assets/               # Shared photo metadata and crop logic
+│   ├── components/               # UI shared by both surfaces
+│   └── styles/global.css
+├── server/
 │   ├── app.ts                    # Testable Express application factory
 │   ├── config/                   # Environment validation
 │   ├── database/                 # MongoDB lifecycle and indexes
+│   ├── frontend.ts               # Vite and production-client integration
+│   ├── index.ts                  # Process startup and dependency composition
+│   ├── lifecycle.ts              # HTTP, frontend, and database lifecycle
 │   ├── middleware/               # Consistent API errors
-│   ├── recognition/              # Recognition provider boundary
+│   ├── modules/recognition/       # Recognition provider boundary
 │   ├── repositories/             # Asset persistence boundary and Mongo implementation
 │   ├── routes/                   # API routes
 │   ├── services/                 # Asset ingestion orchestration
 │   └── storage/                  # Local image-storage boundary
-├── shared/                       # Browser/server contracts and schemas
+├── shared/
+│   ├── assets.ts                 # Asset API schemas and types
+│   └── contracts/                # Shared recognition schemas and types
 ├── data/
 │   ├── uploads/                  # Ignored local uploads
 │   └── recognition-results/      # Ignored local AI responses
