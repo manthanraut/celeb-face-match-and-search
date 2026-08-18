@@ -1,4 +1,8 @@
 import type { AssetImageMimeType, AssetRecognitionStatus } from "../../shared/assets.js";
+import type {
+  RecognitionProviderName,
+  RecognitionResult,
+} from "../../shared/contracts/recognition.js";
 
 export interface AssetCelebrityAssociation {
   confidence: number | null;
@@ -33,14 +37,34 @@ export interface AssetRecord {
   recognition: {
     attemptNumber: number;
     availableAt: Date;
-    provider: "aws-rekognition";
+    provider: RecognitionProviderName;
     queuedAt: Date;
     revision: number;
     status: AssetRecognitionStatus;
+    completedAt?: Date;
+    lastError?: {
+      code: string;
+      message: string;
+      retryable: boolean;
+      recordedAt: Date;
+    };
+    lease?: {
+      claimedAt: Date;
+      expiresAt: Date;
+      ownerId: string;
+      token: string;
+    };
+    normalizedResult?: RecognitionResult;
+    rawResult?: unknown;
+    startedAt?: Date;
   };
   enrichment: {
     associations: AssetCelebrityAssociation[];
+    decisionEngineVersion?: number;
+    evaluatedAt?: Date;
+    recognitionRevision?: number;
     searchReady: boolean;
+    sourceTextRevision?: number;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -58,7 +82,17 @@ export interface AssetRepository {
   findById(assetId: string): Promise<AssetRecord | null>;
   insert(asset: NewAssetRecord): Promise<AssetRecord>;
   list(options: { cursor?: string; limit: number }): Promise<AssetListPage>;
+  retryRecognition(
+    assetId: string,
+    now: Date,
+    providerName: RecognitionProviderName,
+  ): Promise<AssetRecognitionRetryResult>;
 }
+
+export type AssetRecognitionRetryResult =
+  | { outcome: "REQUEUED" }
+  | { outcome: "NOT_FOUND" }
+  | { outcome: "NOT_RETRYABLE"; status: AssetRecognitionStatus };
 
 export class DuplicateClientAssetIdError extends Error {
   constructor(options?: ErrorOptions) {

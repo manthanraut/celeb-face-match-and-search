@@ -2,12 +2,14 @@ import { Readable } from "node:stream";
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { Asset, AssetUploadResult } from "../../shared/assets.js";
+import type { Asset, AssetDetail, AssetUploadResult } from "../../shared/assets.js";
 import { MAX_ASSET_UPLOAD_FILE_SIZE_BYTES } from "../../shared/assets.js";
 import { createApp } from "../../server/app.js";
 import { ApiError } from "../../server/middleware/error-handler.js";
 import type { AssetRouteService } from "../../server/routes/assets.js";
+import { createUnusedGalleryRouteService } from "../helpers/gallery-route-service.js";
 import { startTestHttpServer } from "../helpers/http-server.js";
+import { createUnusedVersoSearchRouteService } from "../helpers/verso-search-route-service.js";
 
 const ASSET_ID = "64b000000000000000000001";
 const CLIENT_ASSET_ID = "f167c99c-9ad0-4f3d-aad4-bf19cbe15a90";
@@ -38,11 +40,34 @@ function createAsset(overrides: Partial<Asset> = {}): Asset {
   };
 }
 
+function createAssetDetail(overrides: Partial<AssetDetail> = {}): AssetDetail {
+  return {
+    ...createAsset(overrides),
+    enrichment: overrides.enrichment ?? {
+      associations: [],
+      decisionEngineVersion: null,
+      evaluatedAt: null,
+      recognitionRevision: null,
+      searchReady: false,
+      sourceTextRevision: null,
+    },
+    recognition: overrides.recognition ?? {
+      attemptNumber: 0,
+      completedAt: null,
+      lastError: null,
+      provider: "aws-rekognition",
+      result: null,
+      revision: 1,
+      status: "QUEUED",
+    },
+  };
+}
+
 function createAssetService(overrides: Partial<AssetRouteService> = {}): AssetRouteService {
   const asset = createAsset();
 
   return {
-    getById: vi.fn(async () => asset),
+    getById: vi.fn(async () => createAssetDetail()),
     ingest: vi.fn(async () => ({
       assets: [{ ...asset, created: true }],
       createdAny: true,
@@ -54,6 +79,11 @@ function createAssetService(overrides: Partial<AssetRouteService> = {}): AssetRo
       sizeBytes: PNG_BYTES.length,
       stream: Readable.from(PNG_BYTES),
     })),
+    retryRecognition: vi.fn(async () => ({
+      assetId: ASSET_ID,
+      recognitionStatus: "QUEUED" as const,
+    })),
+    updateMetadata: vi.fn(async () => createAssetDetail()),
     ...overrides,
   };
 }
@@ -63,7 +93,9 @@ async function startAssetApi(assetService: AssetRouteService) {
     createApp({
       assetService,
       checkDatabaseReadiness: () => Promise.resolve(),
+      galleryService: createUnusedGalleryRouteService(),
       recognitionProvider: "aws-rekognition",
+      versoSearchService: createUnusedVersoSearchRouteService(),
     }),
   );
 }
@@ -412,6 +444,7 @@ describe("asset API", () => {
 
   it("lists, retrieves, and serves an asset image with safe headers", async () => {
     const asset = createAsset();
+    const assetDetail = createAssetDetail();
     const assetService = createAssetService();
     const testServer = await startAssetApi(assetService);
 
@@ -423,7 +456,7 @@ describe("asset API", () => {
 
       const detailResponse = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}`);
       expect(detailResponse.status).toBe(200);
-      await expect(detailResponse.json()).resolves.toEqual(asset);
+      await expect(detailResponse.json()).resolves.toEqual(assetDetail);
 
       const imageResponse = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/image`);
       expect(imageResponse.status).toBe(200);
@@ -460,6 +493,128 @@ describe("asset API", () => {
           message: "The asset was not found.",
         },
       });
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("accepts an explicit recognition retry", async () => {
+    const assetService = createAssetService();
+    const testServer = await startAssetApi(assetService);
+
+    try {
+      const response = await fetch(
+        `${testServer.baseUrl}/api/assets/${ASSET_ID}/recognition/retry`,
+        { method: "POST" },
+      );
+
+      expect(response.status).toBe(202);
+      await expect(response.json()).resolves.toEqual({
+        assetId: ASSET_ID,
+        recognitionStatus: "QUEUED",
+      });
+      expect(assetService.retryRecognition).toHaveBeenCalledWith(ASSET_ID);
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("returns a stable conflict when recognition is not retryable", async () => {
+    const assetService = createAssetService({
+      retryRecognition: vi.fn(async () => {
+        throw new ApiError(
+          409,
+          "RECOGNITION_RETRY_NOT_ALLOWED",
+          "Recognition can be retried only after a failed or indeterminate attempt.",
+        );
+      }),
+    });
+    const testServer = await startAssetApi(assetService);
+
+    try {
+      const response = await fetch(
+        `${testServer.baseUrl}/api/assets/${ASSET_ID}/recognition/retry`,
+        { method: "POST" },
+      );
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toEqual({
+        error: {
+          code: "RECOGNITION_RETRY_NOT_ALLOWED",
+          message: "Recognition can be retried only after a failed or indeterminate attempt.",
+        },
+      });
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("saves editorial metadata and returns recalculated enrichment", async () => {
+    const updatedDetail = createAssetDetail({
+      enrichment: {
+        associations: [
+          {
+            confidence: 50.4,
+            decision: "APPROVED",
+            displayName: "Rihanna",
+            evidenceFields: ["title"],
+            identityKey: "rihanna",
+            providerPersonId: "aws-rihanna",
+            source: "recognition",
+          },
+        ],
+        decisionEngineVersion: 1,
+        evaluatedAt: "2027-05-04T12:01:00.000Z",
+        recognitionRevision: 2,
+        searchReady: true,
+        sourceTextRevision: 2,
+      },
+      searchReady: true,
+      sourceText: {
+        altText: null,
+        caption: null,
+        revision: 2,
+        title: "Rihanna in Marc Jacobs",
+      },
+    });
+    const assetService = createAssetService({
+      updateMetadata: vi.fn(async () => updatedDetail),
+    });
+    const testServer = await startAssetApi(assetService);
+
+    try {
+      const response = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/metadata`, {
+        body: JSON.stringify({ title: "Rihanna in Marc Jacobs" }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual(updatedDetail);
+      expect(assetService.updateMetadata).toHaveBeenCalledWith(ASSET_ID, {
+        title: "Rihanna in Marc Jacobs",
+      });
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("rejects an empty metadata update", async () => {
+    const assetService = createAssetService();
+    const testServer = await startAssetApi(assetService);
+
+    try {
+      const response = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/metadata`, {
+        body: "{}",
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "VALIDATION_ERROR" },
+      });
+      expect(assetService.updateMetadata).not.toHaveBeenCalled();
     } finally {
       await testServer.close();
     }

@@ -1,19 +1,26 @@
 import express, { Router } from "express";
 
+import type { RecognitionProviderName } from "../../shared/contracts/recognition.js";
 import { apiNotFoundHandler } from "../middleware/api-not-found.js";
 import { apiErrorHandler } from "../middleware/error-handler.js";
 import { createAssetRouter, type AssetRouteService } from "./assets.js";
+import { createGalleryRouter, type GalleryRouteService } from "./galleries.js";
+import { createVersoSearchRouter, type VersoSearchRouteService } from "./search.js";
 
 export interface ApiRouterDependencies {
   assetService: AssetRouteService;
   checkDatabaseReadiness: () => Promise<void>;
-  recognitionProvider: "aws-rekognition";
+  galleryService: GalleryRouteService;
+  recognitionProvider: RecognitionProviderName;
+  versoSearchService: VersoSearchRouteService;
 }
 
 export function createApiRouter({
   assetService,
   checkDatabaseReadiness,
+  galleryService,
   recognitionProvider,
+  versoSearchService,
 }: ApiRouterDependencies): Router {
   const apiRouter = Router();
 
@@ -46,6 +53,8 @@ export function createApiRouter({
   });
 
   apiRouter.use("/assets", createAssetRouter(assetService));
+  apiRouter.use("/galleries", createGalleryRouter(galleryService));
+  apiRouter.use(createVersoSearchRouter(versoSearchService));
 
   apiRouter.use(apiNotFoundHandler);
   apiRouter.use(apiErrorHandler);
