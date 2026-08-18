@@ -1,4 +1,4 @@
-import type { RecognitionResult } from "../../shared/recognition.js";
+import type { RecognitionResult } from "../../../shared/contracts/recognition.js";
 
 export interface RecognitionInput {
   image: Buffer;
