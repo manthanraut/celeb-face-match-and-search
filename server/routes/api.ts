@@ -4,16 +4,19 @@ import type { RecognitionProviderName } from "../../shared/contracts/recognition
 import { apiNotFoundHandler } from "../middleware/api-not-found.js";
 import { apiErrorHandler } from "../middleware/error-handler.js";
 import { createAssetRouter, type AssetRouteService } from "./assets.js";
+import { createGalleryRouter, type GalleryRouteService } from "./galleries.js";
 
 export interface ApiRouterDependencies {
   assetService: AssetRouteService;
   checkDatabaseReadiness: () => Promise<void>;
+  galleryService: GalleryRouteService;
   recognitionProvider: RecognitionProviderName;
 }
 
 export function createApiRouter({
   assetService,
   checkDatabaseReadiness,
+  galleryService,
   recognitionProvider,
 }: ApiRouterDependencies): Router {
   const apiRouter = Router();
@@ -47,6 +50,7 @@ export function createApiRouter({
   });
 
   apiRouter.use("/assets", createAssetRouter(assetService));
+  apiRouter.use("/galleries", createGalleryRouter(galleryService));
 
   apiRouter.use(apiNotFoundHandler);
   apiRouter.use(apiErrorHandler);

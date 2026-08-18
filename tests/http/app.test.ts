@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../../server/app.js";
 import { createUnusedAssetRouteService } from "../helpers/asset-route-service.js";
+import { createUnusedGalleryRouteService } from "../helpers/gallery-route-service.js";
 import { startTestHttpServer } from "../helpers/http-server.js";
 
 describe("API health", () => {
@@ -11,6 +12,7 @@ describe("API health", () => {
       createApp({
         assetService: createUnusedAssetRouteService(),
         checkDatabaseReadiness,
+        galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
       }),
     );
@@ -35,6 +37,7 @@ describe("API health", () => {
       createApp({
         assetService: createUnusedAssetRouteService(),
         checkDatabaseReadiness,
+        galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
       }),
     );
@@ -59,6 +62,7 @@ describe("API health", () => {
       createApp({
         assetService: createUnusedAssetRouteService(),
         checkDatabaseReadiness,
+        galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
       }),
     );
@@ -85,6 +89,7 @@ describe("API errors", () => {
       createApp({
         assetService: createUnusedAssetRouteService(),
         checkDatabaseReadiness: () => Promise.resolve(),
+        galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
       }),
     );
@@ -109,6 +114,7 @@ describe("API errors", () => {
       createApp({
         assetService: createUnusedAssetRouteService(),
         checkDatabaseReadiness: () => Promise.resolve(),
+        galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
       }),
     );
@@ -137,6 +143,7 @@ describe("API errors", () => {
       createApp({
         assetService: createUnusedAssetRouteService(),
         checkDatabaseReadiness: () => Promise.resolve(),
+        galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
       }),
     );

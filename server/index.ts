@@ -11,7 +11,9 @@ import { createRecognitionProvider } from "./modules/recognition/createRecogniti
 import { RecognitionWorker } from "./modules/recognition/RecognitionWorker.js";
 import { MongoAssetRepository } from "./repositories/MongoAssetRepository.js";
 import { MongoCelebrityRepository } from "./repositories/MongoCelebrityRepository.js";
+import { MongoGalleryUsageRepository } from "./repositories/MongoGalleryUsageRepository.js";
 import { AssetService } from "./services/AssetService.js";
+import { GalleryService } from "./services/GalleryService.js";
 import { LocalImageStorage } from "./storage/LocalImageStorage.js";
 
 const projectRoot = process.cwd();
@@ -54,10 +56,15 @@ async function main(): Promise<void> {
           repository: assetRepository,
           storage: imageStorage,
         });
+        const galleryService = new GalleryService({
+          assetRepository,
+          usageRepository: new MongoGalleryUsageRepository(database.db),
+        });
 
         return createApp({
           assetService,
           checkDatabaseReadiness: () => database.ping(),
+          galleryService,
           recognitionProvider: recognitionProvider.name,
         });
       },

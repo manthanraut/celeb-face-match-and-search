@@ -21,6 +21,7 @@ import type {
   EnrichmentRepository,
   SaveAssetMetadataInput,
 } from "./EnrichmentRepository.js";
+import type { GalleryAssetRepository } from "./GalleryAssetRepository.js";
 import type {
   ClaimRecognitionJobOptions,
   RecognitionJob,
@@ -36,7 +37,7 @@ interface AssetDocument extends NewAssetRecord {
 const objectIdPattern = /^[a-f\d]{24}$/i;
 
 export class MongoAssetRepository
-  implements AssetRepository, EnrichmentRepository, RecognitionJobRepository
+  implements AssetRepository, EnrichmentRepository, GalleryAssetRepository, RecognitionJobRepository
 {
   readonly #assets: Collection<AssetDocument>;
 
@@ -69,6 +70,19 @@ export class MongoAssetRepository
 
     const document = await this.#assets.findOne({ _id: objectId });
     return document ? toAssetRecord(document) : null;
+  }
+
+  async findExistingAssetIds(assetIds: readonly string[]): Promise<Set<string>> {
+    if (assetIds.length === 0) {
+      return new Set();
+    }
+
+    const objectIds = assetIds.map((assetId) => ObjectId.createFromHexString(assetId));
+    const documents = await this.#assets
+      .find({ _id: { $in: objectIds } }, { projection: { _id: 1 } })
+      .toArray();
+
+    return new Set(documents.map((document) => document._id.toHexString()));
   }
 
   async insert(asset: NewAssetRecord): Promise<AssetRecord> {

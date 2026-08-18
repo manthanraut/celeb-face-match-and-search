@@ -11,6 +11,10 @@ import {
 } from "../../server/repositories/AssetRepository.js";
 import { MongoAssetRepository } from "../../server/repositories/MongoAssetRepository.js";
 import { MongoCelebrityRepository } from "../../server/repositories/MongoCelebrityRepository.js";
+import {
+  MongoGalleryUsageRepository,
+  type GalleryUsageDocument,
+} from "../../server/repositories/MongoGalleryUsageRepository.js";
 
 const testMongoUri = process.env.TEST_MONGODB_URI;
 const describeWithMongo = testMongoUri ? describe : describe.skip;
@@ -21,6 +25,7 @@ describeWithMongo("MongoDB foundation", () => {
   let database: Db | null = null;
   let assets: MongoAssetRepository | null = null;
   let celebrities: MongoCelebrityRepository | null = null;
+  let galleryUsages: MongoGalleryUsageRepository | null = null;
 
   beforeAll(async () => {
     connection = new MongoDatabase({
@@ -32,11 +37,13 @@ describeWithMongo("MongoDB foundation", () => {
     await ensureDatabaseIndexes(database);
     assets = new MongoAssetRepository(database);
     celebrities = new MongoCelebrityRepository(database);
+    galleryUsages = new MongoGalleryUsageRepository(database);
   });
 
   beforeEach(async () => {
     await database?.collection(collectionNames.assets).deleteMany({});
     await database?.collection(collectionNames.celebrities).deleteMany({});
+    await database?.collection(collectionNames.galleryUsages).deleteMany({});
   });
 
   afterAll(async () => {
@@ -143,6 +150,100 @@ describeWithMongo("MongoDB foundation", () => {
     await expect(
       galleryUsages.insertOne({ assetId: "asset-2", galleryId: "gallery-1" }),
     ).resolves.toBeDefined();
+  });
+
+  it("syncs gallery usages idempotently and removes stale assets", async () => {
+    const first = await assets!.insert(createAsset());
+    const second = await assets!.insert(createAsset());
+    const replacement = await assets!.insert(createAsset());
+    const addedAt = new Date("2027-05-04T12:00:00.000Z");
+    const updatedAt = new Date("2027-05-04T13:00:00.000Z");
+
+    await galleryUsages!.syncGallery({
+      assetIds: [first.id, second.id],
+      event: "met-gala",
+      eventName: "Met Gala",
+      galleryId: "gallery-1",
+      published: false,
+      updatedAt: addedAt,
+      year: 2026,
+    });
+    await galleryUsages!.syncGallery({
+      assetIds: [first.id, second.id],
+      event: "met-gala",
+      eventName: "Met Gala",
+      galleryId: "gallery-1",
+      published: false,
+      updatedAt: addedAt,
+      year: 2026,
+    });
+
+    expect(
+      await database!
+        .collection<GalleryUsageDocument>(collectionNames.galleryUsages)
+        .countDocuments({ galleryId: "gallery-1" }),
+    ).toBe(2);
+
+    await galleryUsages!.syncGallery({
+      assetIds: [first.id, replacement.id],
+      event: "oscars",
+      eventName: "Oscars",
+      galleryId: "gallery-1",
+      published: true,
+      updatedAt,
+      year: 2027,
+    });
+
+    const documents = await database!
+      .collection<GalleryUsageDocument>(collectionNames.galleryUsages)
+      .find({ galleryId: "gallery-1" })
+      .sort({ assetId: 1 })
+      .toArray();
+    const retained = documents.find((document) => document.assetId === first.id);
+    const inserted = documents.find((document) => document.assetId === replacement.id);
+
+    expect(documents.map((document) => document.assetId).sort()).toEqual(
+      [first.id, replacement.id].sort(),
+    );
+    expect(documents.some((document) => document.assetId === second.id)).toBe(false);
+    expect(retained).toMatchObject({
+      addedAt,
+      event: "oscars",
+      eventName: "Oscars",
+      published: true,
+      updatedAt,
+      year: 2027,
+    });
+    expect(inserted).toMatchObject({ addedAt: updatedAt });
+    await expect(assets!.findById(first.id)).resolves.toEqual(first);
+
+    await expect(galleryUsages!.removeAsset("gallery-1", first.id)).resolves.toBe(true);
+    await expect(galleryUsages!.removeAsset("gallery-1", first.id)).resolves.toBe(false);
+    await galleryUsages!.syncGallery({
+      assetIds: [],
+      event: null,
+      eventName: null,
+      galleryId: "gallery-1",
+      published: false,
+      updatedAt,
+      year: null,
+    });
+    expect(
+      await database!
+        .collection(collectionNames.galleryUsages)
+        .countDocuments({ galleryId: "gallery-1" }),
+    ).toBe(0);
+  });
+
+  it("finds only existing gallery asset IDs", async () => {
+    const first = await assets!.insert(createAsset());
+    const second = await assets!.insert(createAsset());
+    const missingId = new ObjectId().toHexString();
+
+    await expect(
+      assets!.findExistingAssetIds([first.id, missingId, second.id, first.id]),
+    ).resolves.toEqual(new Set([first.id, second.id]));
+    await expect(assets!.findExistingAssetIds([])).resolves.toEqual(new Set());
   });
 
   it("round-trips asset records and supports batch lookup", async () => {

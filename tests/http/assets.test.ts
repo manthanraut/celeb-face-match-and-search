@@ -7,6 +7,7 @@ import { MAX_ASSET_UPLOAD_FILE_SIZE_BYTES } from "../../shared/assets.js";
 import { createApp } from "../../server/app.js";
 import { ApiError } from "../../server/middleware/error-handler.js";
 import type { AssetRouteService } from "../../server/routes/assets.js";
+import { createUnusedGalleryRouteService } from "../helpers/gallery-route-service.js";
 import { startTestHttpServer } from "../helpers/http-server.js";
 
 const ASSET_ID = "64b000000000000000000001";
@@ -91,6 +92,7 @@ async function startAssetApi(assetService: AssetRouteService) {
     createApp({
       assetService,
       checkDatabaseReadiness: () => Promise.resolve(),
+      galleryService: createUnusedGalleryRouteService(),
       recognitionProvider: "aws-rekognition",
     }),
   );
