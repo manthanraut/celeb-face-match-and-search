@@ -17,6 +17,11 @@ import {
   type NewAssetRecord,
 } from "./AssetRepository.js";
 import type {
+  ApplyAssetEnrichmentInput,
+  EnrichmentRepository,
+  SaveAssetMetadataInput,
+} from "./EnrichmentRepository.js";
+import type {
   ClaimRecognitionJobOptions,
   RecognitionJob,
   RecognitionJobFailure,
@@ -30,7 +35,9 @@ interface AssetDocument extends NewAssetRecord {
 
 const objectIdPattern = /^[a-f\d]{24}$/i;
 
-export class MongoAssetRepository implements AssetRepository, RecognitionJobRepository {
+export class MongoAssetRepository
+  implements AssetRepository, EnrichmentRepository, RecognitionJobRepository
+{
   readonly #assets: Collection<AssetDocument>;
 
   constructor(database: Db) {
@@ -120,6 +127,8 @@ export class MongoAssetRepository implements AssetRepository, RecognitionJobRepo
       {
         $inc: { "recognition.revision": 1 },
         $set: {
+          "enrichment.associations": [],
+          "enrichment.searchReady": false,
           "recognition.attemptNumber": 0,
           "recognition.availableAt": now,
           "recognition.provider": providerName,
@@ -128,6 +137,10 @@ export class MongoAssetRepository implements AssetRepository, RecognitionJobRepo
           updatedAt: now,
         },
         $unset: {
+          "enrichment.decisionEngineVersion": "",
+          "enrichment.evaluatedAt": "",
+          "enrichment.recognitionRevision": "",
+          "enrichment.sourceTextRevision": "",
           "recognition.completedAt": "",
           "recognition.lastError": "",
           "recognition.lease": "",
@@ -212,6 +225,7 @@ export class MongoAssetRepository implements AssetRepository, RecognitionJobRepo
     const result = await this.#assets.updateOne(
       recognitionOwnershipFilter(job),
       {
+        $inc: { "recognition.revision": 1 },
         $set: {
           "recognition.completedAt": now,
           "recognition.normalizedResult": normalizedResult,
@@ -227,6 +241,73 @@ export class MongoAssetRepository implements AssetRepository, RecognitionJobRepo
     );
 
     return result.modifiedCount === 1;
+  }
+
+  async applyEnrichment({
+    assetId,
+    enrichment,
+    expectedRecognitionRevision,
+    expectedRecognitionStatus,
+    expectedSourceTextRevision,
+    updatedAt,
+  }: ApplyAssetEnrichmentInput): Promise<boolean> {
+    const objectId = parseObjectId(assetId);
+    if (!objectId) {
+      return false;
+    }
+
+    const result = await this.#assets.updateOne(
+      {
+        _id: objectId,
+        "recognition.revision": expectedRecognitionRevision,
+        "recognition.status": expectedRecognitionStatus,
+        "sourceText.revision": expectedSourceTextRevision,
+      },
+      { $set: { enrichment, updatedAt } },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  async findPendingEnrichmentAsset(decisionEngineVersion: number): Promise<AssetRecord | null> {
+    const document = await this.#assets.findOne(
+      {
+        "recognition.status": "SUCCEEDED",
+        $or: [
+          { "enrichment.decisionEngineVersion": { $ne: decisionEngineVersion } },
+          { $expr: { $ne: ["$enrichment.recognitionRevision", "$recognition.revision"] } },
+          { $expr: { $ne: ["$enrichment.sourceTextRevision", "$sourceText.revision"] } },
+        ],
+      },
+      { sort: { "recognition.completedAt": 1, _id: 1 } },
+    );
+    return document ? toAssetRecord(document) : null;
+  }
+
+  async saveMetadataAndEnrichment({
+    assetId,
+    enrichment,
+    expectedRecognitionRevision,
+    expectedRecognitionStatus,
+    expectedSourceTextRevision,
+    sourceText,
+    updatedAt,
+  }: SaveAssetMetadataInput): Promise<AssetRecord | null> {
+    const objectId = parseObjectId(assetId);
+    if (!objectId) {
+      return null;
+    }
+
+    const document = await this.#assets.findOneAndUpdate(
+      {
+        _id: objectId,
+        "recognition.revision": expectedRecognitionRevision,
+        "recognition.status": expectedRecognitionStatus,
+        "sourceText.revision": expectedSourceTextRevision,
+      },
+      { $set: { enrichment, sourceText, updatedAt } },
+      { returnDocument: "after" },
+    );
+    return document ? toAssetRecord(document) : null;
   }
 
   async failRecognitionJob(

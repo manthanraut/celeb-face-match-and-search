@@ -11,11 +11,13 @@ import {
   type AssetDetail,
   type AssetImageMimeType,
   type AssetListResponse,
+  type AssetMetadataUpdate,
   type AssetRecognitionRetryResponse,
   type AssetUploadResult,
 } from "../../shared/assets.js";
 import type { RecognitionProviderName } from "../../shared/contracts/recognition.js";
 import { ApiError } from "../middleware/error-handler.js";
+import type { EnrichmentService } from "../modules/enrichment/EnrichmentService.js";
 import {
   type AssetRecord,
   type AssetRepository,
@@ -51,6 +53,7 @@ export interface OpenedAssetImage {
 }
 
 export interface AssetServiceDependencies {
+  enrichmentService: Pick<EnrichmentService, "updateMetadata">;
   repository: AssetRepository;
   storage: ImageStorage;
   clock?: () => Date;
@@ -496,6 +499,14 @@ function toAsset(record: AssetRecord): Asset {
 function toAssetDetail(record: AssetRecord): AssetDetail {
   return {
     ...toAsset(record),
+    enrichment: {
+      associations: record.enrichment.associations,
+      decisionEngineVersion: record.enrichment.decisionEngineVersion ?? null,
+      evaluatedAt: record.enrichment.evaluatedAt?.toISOString() ?? null,
+      recognitionRevision: record.enrichment.recognitionRevision ?? null,
+      searchReady: record.enrichment.searchReady,
+      sourceTextRevision: record.enrichment.sourceTextRevision ?? null,
+    },
     recognition: {
       attemptNumber: record.recognition.attemptNumber,
       completedAt: record.recognition.completedAt?.toISOString() ?? null,
@@ -525,16 +536,19 @@ async function discardStoredImage(storage: ImageStorage, key: string): Promise<v
 
 export class AssetService {
   private readonly clock: () => Date;
+  private readonly enrichmentService: Pick<EnrichmentService, "updateMetadata">;
   private readonly repository: AssetRepository;
   private readonly recognitionProviderName: RecognitionProviderName;
   private readonly storage: ImageStorage;
 
   constructor({
+    enrichmentService,
     repository,
     storage,
     clock = () => new Date(),
     recognitionProviderName = "aws-rekognition",
   }: AssetServiceDependencies) {
+    this.enrichmentService = enrichmentService;
     this.repository = repository;
     this.storage = storage;
     this.clock = clock;
@@ -597,6 +611,10 @@ export class AssetService {
   async getById(assetId: string): Promise<AssetDetail> {
     const record = await this.requireAsset(assetId);
     return toAssetDetail(record);
+  }
+
+  async updateMetadata(assetId: string, update: AssetMetadataUpdate): Promise<AssetDetail> {
+    return toAssetDetail(await this.enrichmentService.updateMetadata(assetId, update));
   }
 
   async retryRecognition(assetId: string): Promise<AssetRecognitionRetryResponse> {

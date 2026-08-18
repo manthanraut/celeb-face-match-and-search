@@ -41,7 +41,15 @@ function createAsset(overrides: Partial<Asset> = {}): Asset {
 function createAssetDetail(overrides: Partial<AssetDetail> = {}): AssetDetail {
   return {
     ...createAsset(overrides),
-    recognition: {
+    enrichment: overrides.enrichment ?? {
+      associations: [],
+      decisionEngineVersion: null,
+      evaluatedAt: null,
+      recognitionRevision: null,
+      searchReady: false,
+      sourceTextRevision: null,
+    },
+    recognition: overrides.recognition ?? {
       attemptNumber: 0,
       completedAt: null,
       lastError: null,
@@ -50,7 +58,6 @@ function createAssetDetail(overrides: Partial<AssetDetail> = {}): AssetDetail {
       revision: 1,
       status: "QUEUED",
     },
-    ...overrides,
   };
 }
 
@@ -74,6 +81,7 @@ function createAssetService(overrides: Partial<AssetRouteService> = {}): AssetRo
       assetId: ASSET_ID,
       recognitionStatus: "QUEUED" as const,
     })),
+    updateMetadata: vi.fn(async () => createAssetDetail()),
     ...overrides,
   };
 }
@@ -532,6 +540,77 @@ describe("asset API", () => {
           message: "Recognition can be retried only after a failed or indeterminate attempt.",
         },
       });
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("saves editorial metadata and returns recalculated enrichment", async () => {
+    const updatedDetail = createAssetDetail({
+      enrichment: {
+        associations: [
+          {
+            confidence: 50.4,
+            decision: "APPROVED",
+            displayName: "Rihanna",
+            evidenceFields: ["title"],
+            identityKey: "rihanna",
+            providerPersonId: "aws-rihanna",
+            source: "recognition",
+          },
+        ],
+        decisionEngineVersion: 1,
+        evaluatedAt: "2027-05-04T12:01:00.000Z",
+        recognitionRevision: 2,
+        searchReady: true,
+        sourceTextRevision: 2,
+      },
+      searchReady: true,
+      sourceText: {
+        altText: null,
+        caption: null,
+        revision: 2,
+        title: "Rihanna in Marc Jacobs",
+      },
+    });
+    const assetService = createAssetService({
+      updateMetadata: vi.fn(async () => updatedDetail),
+    });
+    const testServer = await startAssetApi(assetService);
+
+    try {
+      const response = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/metadata`, {
+        body: JSON.stringify({ title: "Rihanna in Marc Jacobs" }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual(updatedDetail);
+      expect(assetService.updateMetadata).toHaveBeenCalledWith(ASSET_ID, {
+        title: "Rihanna in Marc Jacobs",
+      });
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("rejects an empty metadata update", async () => {
+    const assetService = createAssetService();
+    const testServer = await startAssetApi(assetService);
+
+    try {
+      const response = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/metadata`, {
+        body: "{}",
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "VALIDATION_ERROR" },
+      });
+      expect(assetService.updateMetadata).not.toHaveBeenCalled();
     } finally {
       await testServer.close();
     }

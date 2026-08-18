@@ -6,9 +6,11 @@ import { MongoDatabase } from "./database/MongoDatabase.js";
 import { ensureDatabaseIndexes } from "./database/indexes.js";
 import { configureFrontend } from "./frontend.js";
 import { closeServer, listen, startServer } from "./lifecycle.js";
+import { EnrichmentService } from "./modules/enrichment/EnrichmentService.js";
 import { createRecognitionProvider } from "./modules/recognition/createRecognitionProvider.js";
 import { RecognitionWorker } from "./modules/recognition/RecognitionWorker.js";
 import { MongoAssetRepository } from "./repositories/MongoAssetRepository.js";
+import { MongoCelebrityRepository } from "./repositories/MongoCelebrityRepository.js";
 import { AssetService } from "./services/AssetService.js";
 import { LocalImageStorage } from "./storage/LocalImageStorage.js";
 
@@ -34,12 +36,20 @@ async function main(): Promise<void> {
       configureFrontend: (app) => configureFrontend(app, projectRoot, environment.NODE_ENV),
       createApplication: () => {
         const assetRepository = new MongoAssetRepository(database.db);
+        const enrichmentService = new EnrichmentService({
+          approvalThreshold: environment.RECOGNITION_APPROVAL_THRESHOLD,
+          assetRepository,
+          celebrityRepository: new MongoCelebrityRepository(database.db),
+          enrichmentRepository: assetRepository,
+        });
         recognitionWorker = new RecognitionWorker({
+          enrichmentService,
           provider: recognitionProvider,
           repository: assetRepository,
           storage: imageStorage,
         });
         const assetService = new AssetService({
+          enrichmentService,
           recognitionProviderName: recognitionProvider.name,
           repository: assetRepository,
           storage: imageStorage,

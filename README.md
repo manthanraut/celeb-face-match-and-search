@@ -22,6 +22,8 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 - Asset list, detail, and image-serving APIs for the Copilot mock
 - Asynchronous AWS Rekognition worker with atomic claims, leases, retries, and recovery
 - Deterministic fake recognition provider for local development and tests
+- Versioned celebrity decision engine with editorial metadata corroboration
+- Revision-safe metadata updates and persisted approval/review decisions
 - Preserved Python utilities for offline Rekognition experiments and benchmarking
 
 ## Current User Flow
@@ -38,8 +40,8 @@ Open /admin/photos/new
     → Review the Copilot-style photo details page
 ```
 
-The upload and recognition workflow, persisted asset model, and Copilot interface are
-ready. Metadata enrichment, search results, and the celebrity archive are planned next.
+The upload, recognition, and metadata-enrichment workflow is ready. Gallery context,
+search results, and the celebrity archive are planned next.
 
 ## Technology
 
@@ -149,6 +151,7 @@ Stop the development server with `Ctrl+C`.
 | `GET /api/assets/:assetId` | Ready | Asset metadata and recognition state |
 | `GET /api/assets/:assetId/image` | Ready | Stored image bytes |
 | `POST /api/assets/:assetId/recognition/retry` | Ready | Explicitly retry failed or indeterminate recognition |
+| `PATCH /api/assets/:assetId/metadata` | Ready | Save editorial metadata and recalculate celebrity decisions |
 
 ## Asset Ingestion API
 
@@ -222,8 +225,9 @@ instead of being repeated without a known outcome.
 
 Provider responses are stored in raw and normalized forms. Only the normalized result and a
 safe error summary are returned by `GET /api/assets/:assetId`; raw provider payloads remain
-internal. Recognition does not create celebrity associations or change `searchReady` in this
-phase.
+internal. Successful recognition is evaluated immediately by the celebrity decision engine.
+The worker also reconciles completed results that were not enriched because a process stopped
+between the two operations.
 
 For local work without AWS credentials, set:
 
@@ -241,6 +245,37 @@ POST /api/assets/<asset-id>/recognition/retry
 
 The endpoint returns `202` after requeueing. Assets in `QUEUED`, `PROCESSING`, or `SUCCEEDED`
 state return `409` because only a terminal failure can be retried manually.
+
+## Metadata Enrichment and Decisions
+
+Decision engine version 1 uses the configured `RECOGNITION_APPROVAL_THRESHOLD`, which defaults
+to `90`. Each recognized celebrity produces one of two persisted decisions:
+
+| Scenario | Decision |
+| --- | --- |
+| Confidence is at or above the threshold | `APPROVED` |
+| Confidence is below the threshold and the celebrity appears in title or caption | `APPROVED` |
+| Confidence is below the threshold without title or caption evidence | `NEEDS_REVIEW` |
+| Recognition returns no celebrity and `X in Y` resolves `X` through the celebrity catalog | `APPROVED` metadata inference |
+| Recognition returns no celebrity and `X` is not in the catalog | No association |
+
+Alt text is stored but is not identity evidence. Review candidates remain persisted, while
+`searchReady` becomes `true` only when at least one association is approved. Multiple faces are
+evaluated independently and repeated matches for the same celebrity are consolidated.
+
+Save one or more editorial fields with:
+
+```bash
+curl -X PATCH http://localhost:3000/api/assets/<asset-id>/metadata \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Rihanna in Marc Jacobs","caption":"Rihanna arrives at the Met Gala"}'
+```
+
+Every metadata save recalculates decisions from the stored recognition result without calling
+Rekognition again. Source-text and recognition revisions are checked in the same atomic MongoDB
+write, so a concurrent recognition completion or editorial save cannot publish stale decisions.
+Metadata-only `X in Y` inference is intentionally catalog-gated; Phase 7 will provide the demo
+catalog seed command.
 
 ## Environment Configuration
 

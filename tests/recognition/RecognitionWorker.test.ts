@@ -80,6 +80,10 @@ function createHarness(options: {
   };
   const dependencies: RecognitionWorkerDependencies = {
     clock: () => NOW,
+    enrichmentService: {
+      evaluateAsset: vi.fn(async () => true),
+      evaluateNextPending: vi.fn(async () => false),
+    },
     options: {
       leaseDurationMs: 30_000,
       maxAttempts: 3,
@@ -93,16 +97,23 @@ function createHarness(options: {
     storage,
   };
 
-  return { provider, repository, storage, worker: new RecognitionWorker(dependencies) };
+  return {
+    enrichmentService: dependencies.enrichmentService,
+    provider,
+    repository,
+    storage,
+    worker: new RecognitionWorker(dependencies),
+  };
 }
 
 describe("RecognitionWorker", () => {
   it("recovers leases, atomically claims due work, and persists both result forms", async () => {
-    const { provider, repository, worker } = createHarness();
+    const { enrichmentService, provider, repository, worker } = createHarness();
 
     await expect(worker.runOnce()).resolves.toBe(true);
 
     expect(repository.recoverExpiredRecognitionJobs).toHaveBeenCalledWith(NOW, 3);
+    expect(enrichmentService.evaluateNextPending).toHaveBeenCalledTimes(1);
     expect(repository.claimRecognitionJob).toHaveBeenCalledWith(
       expect.objectContaining({
         leaseDurationMs: 30_000,
@@ -124,6 +135,7 @@ describe("RecognitionWorker", () => {
       NOW,
     );
     expect(repository.failRecognitionJob).not.toHaveBeenCalled();
+    expect(enrichmentService.evaluateAsset).toHaveBeenCalledWith(JOB.assetId);
   });
 
   it("backs off a retryable provider error before the final attempt", async () => {
@@ -258,5 +270,12 @@ describe("RecognitionWorker", () => {
 
     expect(provider.recognize).not.toHaveBeenCalled();
     expect(repository.completeRecognitionJob).not.toHaveBeenCalled();
+  });
+
+  it("reports recovered pending enrichment as work even without a recognition job", async () => {
+    const { enrichmentService, worker } = createHarness({ job: null });
+    vi.mocked(enrichmentService.evaluateNextPending).mockResolvedValue(true);
+
+    await expect(worker.runOnce()).resolves.toBe(true);
   });
 });

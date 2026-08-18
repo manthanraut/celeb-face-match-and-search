@@ -10,6 +10,7 @@ import {
   type NewAssetRecord,
 } from "../../server/repositories/AssetRepository.js";
 import { MongoAssetRepository } from "../../server/repositories/MongoAssetRepository.js";
+import { MongoCelebrityRepository } from "../../server/repositories/MongoCelebrityRepository.js";
 
 const testMongoUri = process.env.TEST_MONGODB_URI;
 const describeWithMongo = testMongoUri ? describe : describe.skip;
@@ -19,6 +20,7 @@ describeWithMongo("MongoDB foundation", () => {
   let connection: MongoDatabase | null = null;
   let database: Db | null = null;
   let assets: MongoAssetRepository | null = null;
+  let celebrities: MongoCelebrityRepository | null = null;
 
   beforeAll(async () => {
     connection = new MongoDatabase({
@@ -29,10 +31,12 @@ describeWithMongo("MongoDB foundation", () => {
     await ensureDatabaseIndexes(database);
     await ensureDatabaseIndexes(database);
     assets = new MongoAssetRepository(database);
+    celebrities = new MongoCelebrityRepository(database);
   });
 
   beforeEach(async () => {
     await database?.collection(collectionNames.assets).deleteMany({});
+    await database?.collection(collectionNames.celebrities).deleteMany({});
   });
 
   afterAll(async () => {
@@ -303,6 +307,7 @@ describeWithMongo("MongoDB foundation", () => {
       attemptNumber: 1,
       normalizedResult,
       rawResult: { CelebrityFaces: [], UnrecognizedFaces: [{}] },
+      revision: 2,
       status: "SUCCEEDED",
     });
     expect(completed?.enrichment).toEqual(inserted.enrichment);
@@ -353,6 +358,7 @@ describeWithMongo("MongoDB foundation", () => {
     expect(retried?.recognition).not.toHaveProperty("lastError");
     expect(retried?.recognition).not.toHaveProperty("normalizedResult");
     expect(retried?.recognition).not.toHaveProperty("rawResult");
+    expect(retried?.enrichment).toEqual({ associations: [], searchReady: false });
     await expect(assets!.retryRecognition(inserted.id, retriedAt, "fake")).resolves.toEqual({
       outcome: "NOT_RETRYABLE",
       status: "QUEUED",
@@ -407,12 +413,150 @@ describeWithMongo("MongoDB foundation", () => {
       status: "INDETERMINATE",
     });
   });
+
+  it("applies enrichment only to the recognition and metadata revisions it evaluated", async () => {
+    const inserted = await assets!.insert(
+      createAsset({
+        enrichment: { associations: [], searchReady: false },
+        recognition: {
+          normalizedResult: {
+            faces: [],
+            model: "RecognizeCelebrities",
+            provider: "aws-rekognition",
+            schemaVersion: "1.0",
+            unrecognizedFaceCount: 1,
+            warnings: [],
+          },
+          revision: 2,
+          status: "SUCCEEDED",
+        },
+      }),
+    );
+    const evaluatedAt = new Date("2027-05-04T12:00:00.000Z");
+    const enrichment = {
+      associations: [],
+      decisionEngineVersion: 1,
+      evaluatedAt,
+      recognitionRevision: 2,
+      searchReady: false,
+      sourceTextRevision: 1,
+    };
+
+    await expect(assets!.findPendingEnrichmentAsset(1)).resolves.toMatchObject({ id: inserted.id });
+    await expect(
+      assets!.applyEnrichment({
+        assetId: inserted.id,
+        enrichment,
+        expectedRecognitionRevision: 1,
+        expectedRecognitionStatus: "SUCCEEDED",
+        expectedSourceTextRevision: 1,
+        updatedAt: evaluatedAt,
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      assets!.applyEnrichment({
+        assetId: inserted.id,
+        enrichment,
+        expectedRecognitionRevision: 2,
+        expectedRecognitionStatus: "SUCCEEDED",
+        expectedSourceTextRevision: 1,
+        updatedAt: evaluatedAt,
+      }),
+    ).resolves.toBe(true);
+    await expect(assets!.findPendingEnrichmentAsset(1)).resolves.toBeNull();
+  });
+
+  it("saves metadata and enrichment atomically and rejects a stale editorial revision", async () => {
+    const inserted = await assets!.insert(
+      createAsset({
+        enrichment: { associations: [], searchReady: false },
+        recognition: {
+          normalizedResult: {
+            faces: [],
+            model: "RecognizeCelebrities",
+            provider: "aws-rekognition",
+            schemaVersion: "1.0",
+            unrecognizedFaceCount: 1,
+            warnings: [],
+          },
+          revision: 2,
+          status: "SUCCEEDED",
+        },
+      }),
+    );
+    const updatedAt = new Date("2027-05-04T12:00:00.000Z");
+    const sourceText = {
+      ...inserted.sourceText,
+      revision: 2,
+      title: "Rihanna in Marc Jacobs",
+      updatedAt,
+    };
+    const enrichment = {
+      associations: [
+        {
+          confidence: null,
+          decision: "APPROVED" as const,
+          displayName: "Rihanna",
+          evidenceFields: ["title" as const],
+          identityKey: "rihanna",
+          providerPersonId: null,
+          source: "metadata-inference" as const,
+        },
+      ],
+      decisionEngineVersion: 1,
+      evaluatedAt: updatedAt,
+      recognitionRevision: 2,
+      searchReady: true,
+      sourceTextRevision: 2,
+    };
+    const update = {
+      assetId: inserted.id,
+      enrichment,
+      expectedRecognitionRevision: 2,
+      expectedRecognitionStatus: "SUCCEEDED" as const,
+      expectedSourceTextRevision: 1,
+      sourceText,
+      updatedAt,
+    };
+
+    await expect(assets!.saveMetadataAndEnrichment(update)).resolves.toMatchObject({
+      enrichment,
+      sourceText,
+    });
+    await expect(assets!.saveMetadataAndEnrichment(update)).resolves.toBeNull();
+    expect((await assets!.findById(inserted.id))?.enrichment).toEqual(enrichment);
+  });
+
+  it("round-trips the celebrity catalog used by metadata inference", async () => {
+    await database!.collection(collectionNames.celebrities).insertOne({
+      displayName: "Rihanna",
+      normalizedAliases: ["robyn rihanna fenty"],
+      normalizedName: "rihanna",
+      providerIdentities: [
+        { personId: "aws-rihanna", provider: "aws-rekognition" },
+      ],
+      slug: "rihanna",
+    });
+
+    await expect(celebrities!.list()).resolves.toEqual([
+      {
+        displayName: "Rihanna",
+        normalizedAliases: ["robyn rihanna fenty"],
+        normalizedName: "rihanna",
+        providerIdentities: [
+          { personId: "aws-rihanna", provider: "aws-rekognition" },
+        ],
+        slug: "rihanna",
+      },
+    ]);
+  });
 });
 
 function createAsset(
   options: {
     clientAssetId?: string;
     createdAt?: Date;
+    enrichment?: NewAssetRecord["enrichment"];
     recognition?: Partial<NewAssetRecord["recognition"]>;
     storageKey?: string;
   } = {},
@@ -447,7 +591,7 @@ function createAsset(
       status: "QUEUED",
       ...options.recognition,
     },
-    enrichment: {
+    enrichment: options.enrichment ?? {
       associations: [
         {
           confidence: 97.25,

@@ -5,6 +5,7 @@ import { Router } from "express";
 import {
   assetIdSchema,
   assetListQuerySchema,
+  assetMetadataUpdateSchema,
   assetUploadManifestSchema,
 } from "../../shared/assets.js";
 import { ApiError } from "../middleware/error-handler.js";
@@ -13,7 +14,7 @@ import type { AssetService, PreparedAssetUpload } from "../services/AssetService
 
 export type AssetRouteService = Pick<
   AssetService,
-  "getById" | "ingest" | "list" | "openImage" | "retryRecognition"
+  "getById" | "ingest" | "list" | "openImage" | "retryRecognition" | "updateMetadata"
 >;
 
 export function createAssetRouter(assetService: AssetRouteService): Router {
@@ -88,6 +89,12 @@ export function createAssetRouter(assetService: AssetRouteService): Router {
   assetRouter.post("/:assetId/recognition/retry", async (request, response) => {
     const assetId = assetIdSchema.parse(request.params.assetId);
     response.status(202).json(await assetService.retryRecognition(assetId));
+  });
+
+  assetRouter.patch("/:assetId/metadata", async (request, response) => {
+    const assetId = assetIdSchema.parse(request.params.assetId);
+    const metadata = assetMetadataUpdateSchema.parse(request.body);
+    response.json(await assetService.updateMetadata(assetId, metadata));
   });
 
   assetRouter.get("/:assetId", async (request, response) => {
