@@ -22,6 +22,10 @@ const assetIndexes: IndexDescription[] = [
     name: "assets_recognition_queue",
   },
   {
+    key: { "recognition.status": 1, "recognition.lease.expiresAt": 1, _id: 1 },
+    name: "assets_recognition_lease_expiry",
+  },
+  {
     key: { createdAt: -1, _id: -1 },
     name: "assets_created_at_id_desc",
   },

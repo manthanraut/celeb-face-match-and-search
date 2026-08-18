@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const recognitionProviderNameSchema = z.enum(["aws-rekognition", "fake"]);
+
 export const boundingBoxSchema = z.object({
   left: z.number().min(0).max(1),
   top: z.number().min(0).max(1),
@@ -18,7 +20,7 @@ export const recognizedFaceSchema = z.object({
 
 export const recognitionResultSchema = z.object({
   schemaVersion: z.literal("1.0"),
-  provider: z.literal("aws-rekognition"),
+  provider: recognitionProviderNameSchema,
   model: z.string(),
   faces: z.array(recognizedFaceSchema),
   unrecognizedFaceCount: z.number().int().nonnegative(),
@@ -26,3 +28,4 @@ export const recognitionResultSchema = z.object({
 });
 
 export type RecognitionResult = z.infer<typeof recognitionResultSchema>;
+export type RecognitionProviderName = z.infer<typeof recognitionProviderNameSchema>;

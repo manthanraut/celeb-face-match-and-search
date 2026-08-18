@@ -6,14 +6,23 @@ import {
   type WithId,
 } from "mongodb";
 
+import type { RecognitionProviderName } from "../../shared/contracts/recognition.js";
 import { collectionNames } from "../database/indexes.js";
 import {
+  type AssetRecognitionRetryResult,
   type AssetListPage,
   type AssetRecord,
   type AssetRepository,
   DuplicateClientAssetIdError,
   type NewAssetRecord,
 } from "./AssetRepository.js";
+import type {
+  ClaimRecognitionJobOptions,
+  RecognitionJob,
+  RecognitionJobFailure,
+  RecognitionJobRepository,
+  RecognitionLeaseRecoveryResult,
+} from "./RecognitionJobRepository.js";
 
 interface AssetDocument extends NewAssetRecord {
   _id: ObjectId;
@@ -21,7 +30,7 @@ interface AssetDocument extends NewAssetRecord {
 
 const objectIdPattern = /^[a-f\d]{24}$/i;
 
-export class MongoAssetRepository implements AssetRepository {
+export class MongoAssetRepository implements AssetRepository, RecognitionJobRepository {
   readonly #assets: Collection<AssetDocument>;
 
   constructor(database: Db) {
@@ -93,6 +102,235 @@ export class MongoAssetRepository implements AssetRepository {
     };
   }
 
+  async retryRecognition(
+    assetId: string,
+    now: Date,
+    providerName: RecognitionProviderName,
+  ): Promise<AssetRecognitionRetryResult> {
+    const objectId = parseObjectId(assetId);
+    if (!objectId) {
+      return { outcome: "NOT_FOUND" };
+    }
+
+    const requeued = await this.#assets.findOneAndUpdate(
+      {
+        _id: objectId,
+        "recognition.status": { $in: ["FAILED", "INDETERMINATE"] },
+      },
+      {
+        $inc: { "recognition.revision": 1 },
+        $set: {
+          "recognition.attemptNumber": 0,
+          "recognition.availableAt": now,
+          "recognition.provider": providerName,
+          "recognition.queuedAt": now,
+          "recognition.status": "QUEUED",
+          updatedAt: now,
+        },
+        $unset: {
+          "recognition.completedAt": "",
+          "recognition.lastError": "",
+          "recognition.lease": "",
+          "recognition.normalizedResult": "",
+          "recognition.rawResult": "",
+          "recognition.startedAt": "",
+        },
+      },
+      { returnDocument: "after" },
+    );
+
+    if (requeued) {
+      return { outcome: "REQUEUED" };
+    }
+
+    const existing = await this.#assets.findOne(
+      { _id: objectId },
+      { projection: { "recognition.status": 1 } },
+    );
+    if (!existing) {
+      return { outcome: "NOT_FOUND" };
+    }
+
+    return { outcome: "NOT_RETRYABLE", status: existing.recognition.status };
+  }
+
+  async claimRecognitionJob({
+    leaseDurationMs,
+    leaseToken,
+    maxAttempts,
+    now,
+    providerName,
+    workerId,
+  }: ClaimRecognitionJobOptions): Promise<RecognitionJob | null> {
+    const claimed = await this.#assets.findOneAndUpdate(
+      {
+        "recognition.attemptNumber": { $lt: maxAttempts },
+        "recognition.availableAt": { $lte: now },
+        "recognition.provider": providerName,
+        "recognition.status": "QUEUED",
+      },
+      {
+        $inc: { "recognition.attemptNumber": 1 },
+        $set: {
+          "recognition.lease": {
+            claimedAt: now,
+            expiresAt: new Date(now.getTime() + leaseDurationMs),
+            ownerId: workerId,
+            token: leaseToken,
+          },
+          "recognition.startedAt": now,
+          "recognition.status": "PROCESSING",
+          updatedAt: now,
+        },
+      },
+      {
+        returnDocument: "after",
+        sort: { "recognition.availableAt": 1, _id: 1 },
+      },
+    );
+
+    if (!claimed) {
+      return null;
+    }
+
+    return {
+      assetId: claimed._id.toHexString(),
+      attemptNumber: claimed.recognition.attemptNumber,
+      expectedSizeBytes: claimed.storage.sizeBytes,
+      leaseToken,
+      mimeType: claimed.storage.mimeType,
+      recognitionRevision: claimed.recognition.revision,
+      storageKey: claimed.storage.key,
+    };
+  }
+
+  async completeRecognitionJob(
+    job: RecognitionJob,
+    { normalizedResult, rawResult }: Parameters<RecognitionJobRepository["completeRecognitionJob"]>[1],
+    now: Date,
+  ): Promise<boolean> {
+    const result = await this.#assets.updateOne(
+      recognitionOwnershipFilter(job),
+      {
+        $set: {
+          "recognition.completedAt": now,
+          "recognition.normalizedResult": normalizedResult,
+          "recognition.rawResult": rawResult,
+          "recognition.status": "SUCCEEDED",
+          updatedAt: now,
+        },
+        $unset: {
+          "recognition.lastError": "",
+          "recognition.lease": "",
+        },
+      },
+    );
+
+    return result.modifiedCount === 1;
+  }
+
+  async failRecognitionJob(
+    job: RecognitionJob,
+    failure: RecognitionJobFailure,
+    now: Date,
+  ): Promise<boolean> {
+    const terminal = failure.status !== "QUEUED";
+    const result = await this.#assets.updateOne(
+      recognitionOwnershipFilter(job),
+      {
+        $set: {
+          ...(terminal
+            ? { "recognition.completedAt": now }
+            : { "recognition.availableAt": failure.availableAt ?? now }),
+          "recognition.lastError": {
+            ...failure.error,
+            recordedAt: now,
+          },
+          "recognition.status": failure.status,
+          updatedAt: now,
+        },
+        $unset: { "recognition.lease": "" },
+      },
+    );
+
+    return result.modifiedCount === 1;
+  }
+
+  async recoverExpiredRecognitionJobs(
+    now: Date,
+    maxAttempts: number,
+  ): Promise<RecognitionLeaseRecoveryResult> {
+    const [requeued, indeterminate] = await Promise.all([
+      this.#assets.updateMany(
+        {
+          "recognition.attemptNumber": { $lt: maxAttempts },
+          "recognition.lease.expiresAt": { $lte: now },
+          "recognition.status": "PROCESSING",
+        },
+        {
+          $set: {
+            "recognition.availableAt": now,
+            "recognition.lastError": {
+              code: "RECOGNITION_LEASE_EXPIRED",
+              message: "Recognition was interrupted and will be retried.",
+              recordedAt: now,
+              retryable: true,
+            },
+            "recognition.status": "QUEUED",
+            updatedAt: now,
+          },
+          $unset: { "recognition.lease": "" },
+        },
+      ),
+      this.#assets.updateMany(
+        {
+          "recognition.attemptNumber": { $gte: maxAttempts },
+          "recognition.lease.expiresAt": { $lte: now },
+          "recognition.status": "PROCESSING",
+        },
+        {
+          $set: {
+            "recognition.completedAt": now,
+            "recognition.lastError": {
+              code: "RECOGNITION_LEASE_EXHAUSTED",
+              message: "Recognition was interrupted after the final automatic attempt.",
+              recordedAt: now,
+              retryable: false,
+            },
+            "recognition.status": "INDETERMINATE",
+            updatedAt: now,
+          },
+          $unset: { "recognition.lease": "" },
+        },
+      ),
+    ]);
+
+    return {
+      indeterminateCount: indeterminate.modifiedCount,
+      requeuedCount: requeued.modifiedCount,
+    };
+  }
+
+  async releaseRecognitionJob(job: RecognitionJob, now: Date): Promise<boolean> {
+    const result = await this.#assets.updateOne(
+      recognitionOwnershipFilter(job),
+      {
+        $inc: { "recognition.attemptNumber": -1 },
+        $set: {
+          "recognition.availableAt": now,
+          "recognition.status": "QUEUED",
+          updatedAt: now,
+        },
+        $unset: {
+          "recognition.lease": "",
+          "recognition.startedAt": "",
+        },
+      },
+    );
+
+    return result.modifiedCount === 1;
+  }
+
   async #createCursorFilter(cursor: string) {
     const cursorId = parseObjectId(cursor);
     if (!cursorId) {
@@ -114,6 +352,15 @@ export class MongoAssetRepository implements AssetRepository {
       ],
     };
   }
+}
+
+function recognitionOwnershipFilter(job: RecognitionJob) {
+  return {
+    _id: ObjectId.createFromHexString(job.assetId),
+    "recognition.lease.token": job.leaseToken,
+    "recognition.revision": job.recognitionRevision,
+    "recognition.status": "PROCESSING" as const,
+  };
 }
 
 function parseObjectId(value: string): ObjectId | null {

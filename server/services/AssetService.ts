@@ -8,10 +8,13 @@ import {
   MAX_ASSET_UPLOAD_FILE_SIZE_BYTES,
   clientAssetIdSchema,
   type Asset,
+  type AssetDetail,
   type AssetImageMimeType,
   type AssetListResponse,
+  type AssetRecognitionRetryResponse,
   type AssetUploadResult,
 } from "../../shared/assets.js";
+import type { RecognitionProviderName } from "../../shared/contracts/recognition.js";
 import { ApiError } from "../middleware/error-handler.js";
 import {
   type AssetRecord,
@@ -51,6 +54,7 @@ export interface AssetServiceDependencies {
   repository: AssetRepository;
   storage: ImageStorage;
   clock?: () => Date;
+  recognitionProviderName?: RecognitionProviderName;
 }
 
 interface PreparedAsset {
@@ -423,7 +427,12 @@ function prepareUpload(input: PreparedAssetUpload, index: number): PreparedAsset
   };
 }
 
-function createRecord(asset: PreparedAsset, storageKey: string, timestamp: Date): NewAssetRecord {
+function createRecord(
+  asset: PreparedAsset,
+  storageKey: string,
+  timestamp: Date,
+  recognitionProviderName: RecognitionProviderName,
+): NewAssetRecord {
   return {
     ingest: {
       clientAssetId: asset.clientAssetId,
@@ -446,7 +455,7 @@ function createRecord(asset: PreparedAsset, storageKey: string, timestamp: Date)
     recognition: {
       attemptNumber: 0,
       availableAt: timestamp,
-      provider: "aws-rekognition",
+      provider: recognitionProviderName,
       queuedAt: timestamp,
       revision: 1,
       status: "QUEUED",
@@ -484,6 +493,28 @@ function toAsset(record: AssetRecord): Asset {
   };
 }
 
+function toAssetDetail(record: AssetRecord): AssetDetail {
+  return {
+    ...toAsset(record),
+    recognition: {
+      attemptNumber: record.recognition.attemptNumber,
+      completedAt: record.recognition.completedAt?.toISOString() ?? null,
+      lastError: record.recognition.lastError
+        ? {
+            code: record.recognition.lastError.code,
+            message: record.recognition.lastError.message,
+            retryable: record.recognition.lastError.retryable,
+            recordedAt: record.recognition.lastError.recordedAt.toISOString(),
+          }
+        : null,
+      provider: record.recognition.provider,
+      result: record.recognition.normalizedResult ?? null,
+      revision: record.recognition.revision,
+      status: record.recognition.status,
+    },
+  };
+}
+
 async function discardStoredImage(storage: ImageStorage, key: string): Promise<void> {
   try {
     await storage.delete(key);
@@ -495,12 +526,19 @@ async function discardStoredImage(storage: ImageStorage, key: string): Promise<v
 export class AssetService {
   private readonly clock: () => Date;
   private readonly repository: AssetRepository;
+  private readonly recognitionProviderName: RecognitionProviderName;
   private readonly storage: ImageStorage;
 
-  constructor({ repository, storage, clock = () => new Date() }: AssetServiceDependencies) {
+  constructor({
+    repository,
+    storage,
+    clock = () => new Date(),
+    recognitionProviderName = "aws-rekognition",
+  }: AssetServiceDependencies) {
     this.repository = repository;
     this.storage = storage;
     this.clock = clock;
+    this.recognitionProviderName = recognitionProviderName;
   }
 
   async ingest(inputs: readonly PreparedAssetUpload[]): Promise<AssetIngestResult> {
@@ -556,9 +594,29 @@ export class AssetService {
     };
   }
 
-  async getById(assetId: string): Promise<Asset> {
+  async getById(assetId: string): Promise<AssetDetail> {
     const record = await this.requireAsset(assetId);
-    return toAsset(record);
+    return toAssetDetail(record);
+  }
+
+  async retryRecognition(assetId: string): Promise<AssetRecognitionRetryResponse> {
+    const result = await this.repository.retryRecognition(
+      assetId,
+      this.clock(),
+      this.recognitionProviderName,
+    );
+    if (result.outcome === "NOT_FOUND") {
+      throw new ApiError(404, "ASSET_NOT_FOUND", "The asset was not found.");
+    }
+    if (result.outcome === "NOT_RETRYABLE") {
+      throw new ApiError(
+        409,
+        "RECOGNITION_RETRY_NOT_ALLOWED",
+        "Recognition can be retried only after a failed or indeterminate attempt.",
+      );
+    }
+
+    return { assetId, recognitionStatus: "QUEUED" };
   }
 
   async list(options: AssetListOptions): Promise<AssetListResponse> {
@@ -601,7 +659,9 @@ export class AssetService {
     let inserted: AssetRecord;
 
     try {
-      inserted = await this.repository.insert(createRecord(asset, storageKey, this.clock()));
+      inserted = await this.repository.insert(
+        createRecord(asset, storageKey, this.clock(), this.recognitionProviderName),
+      );
     } catch (error) {
       let existing: AssetRecord | undefined;
 

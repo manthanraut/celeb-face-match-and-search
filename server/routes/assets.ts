@@ -11,7 +11,10 @@ import { ApiError } from "../middleware/error-handler.js";
 import { createImageUploadHandlers } from "../middleware/image-upload.js";
 import type { AssetService, PreparedAssetUpload } from "../services/AssetService.js";
 
-export type AssetRouteService = Pick<AssetService, "getById" | "ingest" | "list" | "openImage">;
+export type AssetRouteService = Pick<
+  AssetService,
+  "getById" | "ingest" | "list" | "openImage" | "retryRecognition"
+>;
 
 export function createAssetRouter(assetService: AssetRouteService): Router {
   const assetRouter = Router();
@@ -80,6 +83,11 @@ export function createAssetRouter(assetService: AssetRouteService): Router {
     });
 
     await pipeline(image.stream, response);
+  });
+
+  assetRouter.post("/:assetId/recognition/retry", async (request, response) => {
+    const assetId = assetIdSchema.parse(request.params.assetId);
+    response.status(202).json(await assetService.retryRecognition(assetId));
   });
 
   assetRouter.get("/:assetId", async (request, response) => {

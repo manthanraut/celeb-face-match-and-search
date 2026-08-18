@@ -10,5 +10,6 @@ export function createUnusedAssetRouteService(): AssetRouteService {
     ingest: unexpectedCall,
     list: unexpectedCall,
     openImage: unexpectedCall,
+    retryRecognition: unexpectedCall,
   };
 }

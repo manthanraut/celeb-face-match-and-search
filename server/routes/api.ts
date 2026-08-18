@@ -1,5 +1,6 @@
 import express, { Router } from "express";
 
+import type { RecognitionProviderName } from "../../shared/contracts/recognition.js";
 import { apiNotFoundHandler } from "../middleware/api-not-found.js";
 import { apiErrorHandler } from "../middleware/error-handler.js";
 import { createAssetRouter, type AssetRouteService } from "./assets.js";
@@ -7,7 +8,7 @@ import { createAssetRouter, type AssetRouteService } from "./assets.js";
 export interface ApiRouterDependencies {
   assetService: AssetRouteService;
   checkDatabaseReadiness: () => Promise<void>;
-  recognitionProvider: "aws-rekognition";
+  recognitionProvider: RecognitionProviderName;
 }
 
 export function createApiRouter({

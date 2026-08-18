@@ -66,6 +66,9 @@ describeWithMongo("MongoDB foundation", () => {
     const recognitionQueueIndex = assetIndexes.find(
       (index) => index.name === "assets_recognition_queue",
     );
+    const recognitionLeaseIndex = assetIndexes.find(
+      (index) => index.name === "assets_recognition_lease_expiry",
+    );
     const assetListIndex = assetIndexes.find(
       (index) => index.name === "assets_created_at_id_desc",
     );
@@ -88,6 +91,12 @@ describeWithMongo("MongoDB foundation", () => {
     expect(Object.entries(recognitionQueueIndex!.key)).toEqual([
       ["recognition.status", 1],
       ["recognition.availableAt", 1],
+      ["_id", 1],
+    ]);
+    expect(recognitionLeaseIndex?.unique).not.toBe(true);
+    expect(Object.entries(recognitionLeaseIndex!.key)).toEqual([
+      ["recognition.status", 1],
+      ["recognition.lease.expiresAt", 1],
       ["_id", 1],
     ]);
     expect(assetListIndex?.unique).not.toBe(true);
@@ -229,12 +238,182 @@ describeWithMongo("MongoDB foundation", () => {
       assets!.list({ cursor: new ObjectId().toHexString(), limit: 2 }),
     ).resolves.toEqual({ assets: [], hasMore: false });
   });
+
+  it("atomically claims a queued job and rejects stale lease completion", async () => {
+    const inserted = await assets!.insert(createAsset());
+    const now = new Date("2027-05-04T12:00:00.000Z");
+    const claim = (leaseToken: string) =>
+      assets!.claimRecognitionJob({
+        leaseDurationMs: 30_000,
+        leaseToken,
+        maxAttempts: 3,
+        now,
+        providerName: "aws-rekognition",
+        workerId: "worker-1",
+      });
+
+    const claims = await Promise.all([claim("lease-a"), claim("lease-b")]);
+    const claimed = claims.find((job) => job !== null)!;
+
+    expect(claims.filter((job) => job !== null)).toHaveLength(1);
+    expect(claimed).toMatchObject({
+      assetId: inserted.id,
+      attemptNumber: 1,
+      recognitionRevision: 1,
+    });
+    await expect(
+      assets!.completeRecognitionJob(
+        { ...claimed, leaseToken: "stale-token" },
+        {
+          normalizedResult: {
+            faces: [],
+            model: "RecognizeCelebrities",
+            provider: "aws-rekognition",
+            schemaVersion: "1.0",
+            unrecognizedFaceCount: 1,
+            warnings: [],
+          },
+          rawResult: { CelebrityFaces: [], UnrecognizedFaces: [{}] },
+        },
+        now,
+      ),
+    ).resolves.toBe(false);
+
+    const normalizedResult = {
+      faces: [],
+      model: "RecognizeCelebrities",
+      provider: "aws-rekognition" as const,
+      schemaVersion: "1.0" as const,
+      unrecognizedFaceCount: 1,
+      warnings: [],
+    };
+    await expect(
+      assets!.completeRecognitionJob(
+        claimed,
+        {
+          normalizedResult,
+          rawResult: { CelebrityFaces: [], UnrecognizedFaces: [{}] },
+        },
+        now,
+      ),
+    ).resolves.toBe(true);
+
+    const completed = await assets!.findById(inserted.id);
+    expect(completed?.recognition).toMatchObject({
+      attemptNumber: 1,
+      normalizedResult,
+      rawResult: { CelebrityFaces: [], UnrecognizedFaces: [{}] },
+      status: "SUCCEEDED",
+    });
+    expect(completed?.enrichment).toEqual(inserted.enrichment);
+  });
+
+  it("explicitly retries terminal work and switches it to the configured provider", async () => {
+    const completedAt = new Date("2027-05-04T11:00:00.000Z");
+    const inserted = await assets!.insert(
+      createAsset({
+        recognition: {
+          attemptNumber: 3,
+          completedAt,
+          lastError: {
+            code: "RECOGNITION_PROVIDER_UNAVAILABLE",
+            message: "Recognition failed.",
+            recordedAt: completedAt,
+            retryable: true,
+          },
+          normalizedResult: {
+            faces: [],
+            model: "RecognizeCelebrities",
+            provider: "aws-rekognition",
+            schemaVersion: "1.0",
+            unrecognizedFaceCount: 0,
+            warnings: [],
+          },
+          rawResult: { private: true },
+          status: "FAILED",
+        },
+      }),
+    );
+    const retriedAt = new Date("2027-05-04T12:00:00.000Z");
+
+    await expect(assets!.retryRecognition(inserted.id, retriedAt, "fake")).resolves.toEqual({
+      outcome: "REQUEUED",
+    });
+
+    const retried = await assets!.findById(inserted.id);
+    expect(retried?.recognition).toMatchObject({
+      attemptNumber: 0,
+      availableAt: retriedAt,
+      provider: "fake",
+      queuedAt: retriedAt,
+      revision: 2,
+      status: "QUEUED",
+    });
+    expect(retried?.recognition).not.toHaveProperty("completedAt");
+    expect(retried?.recognition).not.toHaveProperty("lastError");
+    expect(retried?.recognition).not.toHaveProperty("normalizedResult");
+    expect(retried?.recognition).not.toHaveProperty("rawResult");
+    await expect(assets!.retryRecognition(inserted.id, retriedAt, "fake")).resolves.toEqual({
+      outcome: "NOT_RETRYABLE",
+      status: "QUEUED",
+    });
+  });
+
+  it("recovers expired leases without repeating an exhausted automatic attempt", async () => {
+    const expiredAt = new Date("2027-05-04T11:59:00.000Z");
+    const now = new Date("2027-05-04T12:00:00.000Z");
+    const retryable = await assets!.insert(
+      createAsset({
+        recognition: {
+          attemptNumber: 1,
+          lease: {
+            claimedAt: new Date("2027-05-04T11:58:30.000Z"),
+            expiresAt: expiredAt,
+            ownerId: "dead-worker",
+            token: "expired-1",
+          },
+          startedAt: new Date("2027-05-04T11:58:30.000Z"),
+          status: "PROCESSING",
+        },
+      }),
+    );
+    const exhausted = await assets!.insert(
+      createAsset({
+        recognition: {
+          attemptNumber: 3,
+          lease: {
+            claimedAt: new Date("2027-05-04T11:58:30.000Z"),
+            expiresAt: expiredAt,
+            ownerId: "dead-worker",
+            token: "expired-2",
+          },
+          startedAt: new Date("2027-05-04T11:58:30.000Z"),
+          status: "PROCESSING",
+        },
+      }),
+    );
+
+    await expect(assets!.recoverExpiredRecognitionJobs(now, 3)).resolves.toEqual({
+      indeterminateCount: 1,
+      requeuedCount: 1,
+    });
+    expect((await assets!.findById(retryable.id))?.recognition).toMatchObject({
+      lastError: { code: "RECOGNITION_LEASE_EXPIRED", retryable: true },
+      status: "QUEUED",
+    });
+    expect((await assets!.findById(exhausted.id))?.recognition).toMatchObject({
+      completedAt: now,
+      lastError: { code: "RECOGNITION_LEASE_EXHAUSTED", retryable: false },
+      status: "INDETERMINATE",
+    });
+  });
 });
 
 function createAsset(
   options: {
     clientAssetId?: string;
     createdAt?: Date;
+    recognition?: Partial<NewAssetRecord["recognition"]>;
     storageKey?: string;
   } = {},
 ): NewAssetRecord {
@@ -266,6 +445,7 @@ function createAsset(
       queuedAt: createdAt,
       revision: 1,
       status: "QUEUED",
+      ...options.recognition,
     },
     enrichment: {
       associations: [

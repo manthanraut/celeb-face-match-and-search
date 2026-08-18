@@ -20,6 +20,8 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 - MongoDB connection lifecycle, readiness check, and idempotent index initialization
 - Idempotent single and batch image ingestion with local file storage
 - Asset list, detail, and image-serving APIs for the Copilot mock
+- Asynchronous AWS Rekognition worker with atomic claims, leases, retries, and recovery
+- Deterministic fake recognition provider for local development and tests
 - Preserved Python utilities for offline Rekognition experiments and benchmarking
 
 ## Current User Flow
@@ -36,8 +38,8 @@ Open /admin/photos/new
     → Review the Copilot-style photo details page
 ```
 
-The backend upload workflow, persisted asset model, and Copilot interface are ready. The
-AWS recognition worker, search results, and celebrity archive are planned next.
+The upload and recognition workflow, persisted asset model, and Copilot interface are
+ready. Metadata enrichment, search results, and the celebrity archive are planned next.
 
 ## Technology
 
@@ -60,7 +62,7 @@ AWS recognition worker, search results, and celebrity archive are planned next.
 - npm 10 or newer
 - A local MongoDB instance for backend development
 - Internet access for the sample gallery image
-- AWS credentials only when working on Rekognition features
+- AWS credentials when `RECOGNITION_PROVIDER=aws-rekognition`
 
 ## Quick Start
 
@@ -146,6 +148,7 @@ Stop the development server with `Ctrl+C`.
 | `POST /api/assets` | Ready | Single or batch image ingestion |
 | `GET /api/assets/:assetId` | Ready | Asset metadata and recognition state |
 | `GET /api/assets/:assetId/image` | Ready | Stored image bytes |
+| `POST /api/assets/:assetId/recognition/retry` | Ready | Explicitly retry failed or indeterminate recognition |
 
 ## Asset Ingestion API
 
@@ -162,9 +165,8 @@ curl -X POST http://localhost:3000/api/assets \
 ```
 
 The response is immediate after the image and MongoDB record are saved. Recognition is
-initialized as `QUEUED`; Phase 3 will process it asynchronously. Reusing a client asset
-ID with the same bytes returns the original asset, while reusing it for different bytes
-returns `409`.
+initialized as `QUEUED` and processed asynchronously. Reusing a client asset ID with the
+same bytes returns the original asset, while reusing it for different bytes returns `409`.
 
 Upload results preserve manifest order and include a `created` flag plus relative asset,
 image, and admin links. The endpoint returns `201` when at least one asset is created and
@@ -210,6 +212,36 @@ TEST_MONGODB_URI=mongodb://127.0.0.1:27017 \
 
 The integration suite creates a uniquely named test database and drops it when the run finishes.
 
+## Asynchronous Recognition
+
+The server atomically claims queued assets in MongoDB and processes them with the configured
+provider. A claim uses a time-limited lease so interrupted work can be recovered safely. The
+worker makes up to three attempts for temporary provider failures with exponential backoff.
+Non-retryable failures stop immediately. An expired final attempt becomes `INDETERMINATE`
+instead of being repeated without a known outcome.
+
+Provider responses are stored in raw and normalized forms. Only the normalized result and a
+safe error summary are returned by `GET /api/assets/:assetId`; raw provider payloads remain
+internal. Recognition does not create celebrity associations or change `searchReady` in this
+phase.
+
+For local work without AWS credentials, set:
+
+```env
+RECOGNITION_PROVIDER=fake
+```
+
+The fake provider derives stable results from the image bytes, making repeated runs and tests
+deterministic. New uploads are tagged with the active provider. An explicit retry also moves a
+failed or indeterminate asset to the currently configured provider:
+
+```text
+POST /api/assets/<asset-id>/recognition/retry
+```
+
+The endpoint returns `202` after requeueing. Assets in `QUEUED`, `PROCESSING`, or `SUCCEEDED`
+state return `409` because only a terminal failure can be retried manually.
+
 ## Environment Configuration
 
 Copy `.env.example` to `.env`. The initial configuration is:
@@ -225,16 +257,16 @@ UPLOAD_DIR=data/uploads
 RECOGNITION_APPROVAL_THRESHOLD=90
 ```
 
-The web application currently accepts only:
+The application accepts `aws-rekognition` or `fake`:
 
 ```env
-RECOGNITION_PROVIDER=aws-rekognition
+RECOGNITION_PROVIDER=fake
 ```
 
 ### AWS Credentials
 
-AWS credentials are not needed to view the gallery or work on frontend pages. They
-will be required when the Rekognition endpoint is implemented.
+AWS credentials are not needed to view existing pages or when using the fake provider. They
+are required when the worker processes an upload with `RECOGNITION_PROVIDER=aws-rekognition`.
 
 Prefer an AWS profile or temporary credentials configured outside the repository:
 
@@ -263,7 +295,8 @@ The project is one application, not separately deployed frontend and backend ser
 Browser
    ↓
 Express server
-   ├── /api/*  → API routes and future AWS/database services
+   ├── /api/*  → API routes
+   ├── recognition worker → AWS Rekognition or deterministic fake provider
    ├── MongoDB  → metadata, recognition state and gallery usage
    ├── data/uploads → ignored local image storage
    └── /*       → React application through Vite or the production build

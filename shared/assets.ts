@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  recognitionProviderNameSchema,
+  recognitionResultSchema,
+} from "./contracts/recognition.js";
+
 export const MAX_ASSET_UPLOAD_FILES = 10;
 export const MAX_ASSET_UPLOAD_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 export const MAX_ASSET_IMAGE_DIMENSION = 10_000;
@@ -40,6 +45,27 @@ export const assetSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   links: assetLinksSchema,
+});
+
+export const assetRecognitionErrorSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  retryable: z.boolean(),
+  recordedAt: z.string().datetime(),
+});
+
+export const assetRecognitionSchema = z.object({
+  status: assetRecognitionStatusSchema,
+  provider: recognitionProviderNameSchema,
+  attemptNumber: z.number().int().nonnegative(),
+  revision: z.number().int().positive(),
+  completedAt: z.string().datetime().nullable(),
+  lastError: assetRecognitionErrorSchema.nullable(),
+  result: recognitionResultSchema.nullable(),
+});
+
+export const assetDetailSchema = assetSchema.extend({
+  recognition: assetRecognitionSchema,
 });
 
 export const assetUploadManifestSchema = z
@@ -83,10 +109,19 @@ export const assetListResponseSchema = z.object({
   nextCursor: assetIdSchema.nullable(),
 });
 
+export const assetRecognitionRetryResponseSchema = z.object({
+  assetId: assetIdSchema,
+  recognitionStatus: z.literal("QUEUED"),
+});
+
 export type Asset = z.infer<typeof assetSchema>;
+export type AssetDetail = z.infer<typeof assetDetailSchema>;
 export type AssetImageMimeType = z.infer<typeof assetImageMimeTypeSchema>;
 export type AssetListResponse = z.infer<typeof assetListResponseSchema>;
 export type AssetRecognitionStatus = z.infer<typeof assetRecognitionStatusSchema>;
 export type AssetUploadManifest = z.infer<typeof assetUploadManifestSchema>;
 export type AssetUploadResponse = z.infer<typeof assetUploadResponseSchema>;
 export type AssetUploadResult = z.infer<typeof assetUploadResultSchema>;
+export type AssetRecognitionRetryResponse = z.infer<
+  typeof assetRecognitionRetryResponseSchema
+>;

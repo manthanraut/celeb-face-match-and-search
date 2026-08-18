@@ -68,12 +68,14 @@ function makeRecord({
   image = JPEG,
   key = "stored/first.jpg",
   originalFilename = "first.jpg",
+  recognition,
 }: {
   id?: string;
   clientAssetId?: string;
   image?: Buffer;
   key?: string;
   originalFilename?: string;
+  recognition?: Partial<AssetRecord["recognition"]>;
 } = {}): AssetRecord {
   const mimeType = image.subarray(0, 8).equals(PNG.subarray(0, 8)) ? "image/png" : "image/jpeg";
 
@@ -101,6 +103,7 @@ function makeRecord({
       queuedAt: FIXED_TIME,
       revision: 1,
       status: "QUEUED",
+      ...recognition,
     },
     enrichment: { associations: [], searchReady: false },
     createdAt: FIXED_TIME,
@@ -114,6 +117,7 @@ function createHarness() {
     findById: vi.fn(async () => null),
     insert: vi.fn(async (asset) => ({ id: FIRST_ASSET_ID, ...asset })),
     list: vi.fn(async () => ({ assets: [], hasMore: false })),
+    retryRecognition: vi.fn(async () => ({ outcome: "REQUEUED" as const })),
   };
   const storage: ImageStorage = {
     delete: vi.fn(async () => undefined),
@@ -524,6 +528,78 @@ describe("AssetService reads", () => {
       nextCursor: SECOND_ASSET_ID,
     });
     expect(repository.list).toHaveBeenCalledWith({ limit: 2 });
+  });
+
+  it("returns normalized recognition details without exposing raw provider output", async () => {
+    const { repository, service } = createHarness();
+    const completedAt = new Date("2027-05-04T12:01:00.000Z");
+    const record = makeRecord({
+      recognition: {
+        attemptNumber: 1,
+        completedAt,
+        normalizedResult: {
+          faces: [],
+          model: "deterministic-fake-v1",
+          provider: "fake",
+          schemaVersion: "1.0",
+          unrecognizedFaceCount: 1,
+          warnings: [],
+        },
+        provider: "fake",
+        rawResult: { privateProviderPayload: "must-not-leak" },
+        status: "SUCCEEDED",
+      },
+    });
+    vi.mocked(repository.findById).mockResolvedValue(record);
+
+    const detail = await service.getById(FIRST_ASSET_ID);
+
+    expect(detail.recognition).toEqual({
+      attemptNumber: 1,
+      completedAt: completedAt.toISOString(),
+      lastError: null,
+      provider: "fake",
+      result: record.recognition.normalizedResult,
+      revision: 1,
+      status: "SUCCEEDED",
+    });
+    expect(detail).not.toHaveProperty("recognition.rawResult");
+    expect(JSON.stringify(detail)).not.toContain("must-not-leak");
+  });
+
+  it("explicitly requeues only retryable terminal recognition states", async () => {
+    const { repository, storage } = createHarness();
+    const service = new AssetService({
+      clock: () => FIXED_TIME,
+      recognitionProviderName: "fake",
+      repository,
+      storage,
+    });
+
+    await expect(service.retryRecognition(FIRST_ASSET_ID)).resolves.toEqual({
+      assetId: FIRST_ASSET_ID,
+      recognitionStatus: "QUEUED",
+    });
+    expect(repository.retryRecognition).toHaveBeenCalledWith(
+      FIRST_ASSET_ID,
+      FIXED_TIME,
+      "fake",
+    );
+
+    vi.mocked(repository.retryRecognition).mockResolvedValueOnce({
+      outcome: "NOT_RETRYABLE",
+      status: "PROCESSING",
+    });
+    await expect(service.retryRecognition(FIRST_ASSET_ID)).rejects.toMatchObject({
+      code: "RECOGNITION_RETRY_NOT_ALLOWED",
+      statusCode: 409,
+    });
+
+    vi.mocked(repository.retryRecognition).mockResolvedValueOnce({ outcome: "NOT_FOUND" });
+    await expect(service.retryRecognition(FIRST_ASSET_ID)).rejects.toMatchObject({
+      code: "ASSET_NOT_FOUND",
+      statusCode: 404,
+    });
   });
 
   it("returns a safe 404 for missing asset details and images", async () => {
