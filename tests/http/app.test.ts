@@ -1,13 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../../server/app.js";
+import { createUnusedAssetRouteService } from "../helpers/asset-route-service.js";
+import { createUnusedGalleryRouteService } from "../helpers/gallery-route-service.js";
 import { startTestHttpServer } from "../helpers/http-server.js";
+import { createUnusedVersoSearchRouteService } from "../helpers/verso-search-route-service.js";
 
 describe("API health", () => {
   it("returns liveness without querying MongoDB", async () => {
     const checkDatabaseReadiness = vi.fn().mockRejectedValue(new Error("database secret"));
     const testServer = await startTestHttpServer(
-      createApp({ checkDatabaseReadiness, recognitionProvider: "aws-rekognition" }),
+      createApp({
+        assetService: createUnusedAssetRouteService(),
+        checkDatabaseReadiness,
+        galleryService: createUnusedGalleryRouteService(),
+        recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
+      }),
     );
 
     try {
@@ -27,7 +36,13 @@ describe("API health", () => {
   it("returns readiness when MongoDB responds", async () => {
     const checkDatabaseReadiness = vi.fn().mockResolvedValue(undefined);
     const testServer = await startTestHttpServer(
-      createApp({ checkDatabaseReadiness, recognitionProvider: "aws-rekognition" }),
+      createApp({
+        assetService: createUnusedAssetRouteService(),
+        checkDatabaseReadiness,
+        galleryService: createUnusedGalleryRouteService(),
+        recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
+      }),
     );
 
     try {
@@ -47,7 +62,13 @@ describe("API health", () => {
   it("returns sanitized unavailability when MongoDB cannot respond", async () => {
     const checkDatabaseReadiness = vi.fn().mockRejectedValue(new Error("mongodb://user:password@host"));
     const testServer = await startTestHttpServer(
-      createApp({ checkDatabaseReadiness, recognitionProvider: "aws-rekognition" }),
+      createApp({
+        assetService: createUnusedAssetRouteService(),
+        checkDatabaseReadiness,
+        galleryService: createUnusedGalleryRouteService(),
+        recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
+      }),
     );
 
     try {
@@ -69,7 +90,13 @@ describe("API health", () => {
 describe("API errors", () => {
   it("returns JSON for unknown API routes", async () => {
     const testServer = await startTestHttpServer(
-      createApp({ checkDatabaseReadiness: () => Promise.resolve(), recognitionProvider: "aws-rekognition" }),
+      createApp({
+        assetService: createUnusedAssetRouteService(),
+        checkDatabaseReadiness: () => Promise.resolve(),
+        galleryService: createUnusedGalleryRouteService(),
+        recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
+      }),
     );
 
     try {
@@ -89,7 +116,13 @@ describe("API errors", () => {
 
   it("returns a safe error for malformed JSON", async () => {
     const testServer = await startTestHttpServer(
-      createApp({ checkDatabaseReadiness: () => Promise.resolve(), recognitionProvider: "aws-rekognition" }),
+      createApp({
+        assetService: createUnusedAssetRouteService(),
+        checkDatabaseReadiness: () => Promise.resolve(),
+        galleryService: createUnusedGalleryRouteService(),
+        recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
+      }),
     );
 
     try {
@@ -113,7 +146,13 @@ describe("API errors", () => {
 
   it("rejects JSON payloads larger than one MiB", async () => {
     const testServer = await startTestHttpServer(
-      createApp({ checkDatabaseReadiness: () => Promise.resolve(), recognitionProvider: "aws-rekognition" }),
+      createApp({
+        assetService: createUnusedAssetRouteService(),
+        checkDatabaseReadiness: () => Promise.resolve(),
+        galleryService: createUnusedGalleryRouteService(),
+        recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
+      }),
     );
 
     try {

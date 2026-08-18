@@ -1,4 +1,5 @@
 import type { ErrorRequestHandler } from "express";
+import multer from "multer";
 import { ZodError } from "zod";
 
 export class ApiError extends Error {
@@ -23,6 +24,11 @@ function hasHttpMetadata(error: unknown): error is ErrorWithHttpMetadata {
 }
 
 export const apiErrorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+  if (response.headersSent) {
+    _next(error);
+    return;
+  }
+
   if (error instanceof ApiError) {
     response.status(error.statusCode).json({
       error: {
@@ -42,6 +48,40 @@ export const apiErrorHandler: ErrorRequestHandler = (error, _request, response, 
           message: issue.message,
           path: issue.path.join("."),
         })),
+      },
+    });
+    return;
+  }
+
+  if (error instanceof multer.MulterError) {
+    if (error.code === "LIMIT_FILE_SIZE") {
+      response.status(413).json({
+        error: {
+          code: "UPLOAD_FILE_TOO_LARGE",
+          message: "Each image must be 5 MiB or smaller.",
+        },
+      });
+      return;
+    }
+
+    if (
+      error.code === "LIMIT_FILE_COUNT" ||
+      error.code === "LIMIT_PART_COUNT" ||
+      error.code === "LIMIT_UNEXPECTED_FILE"
+    ) {
+      response.status(400).json({
+        error: {
+          code: "UPLOAD_FILE_LIMIT_EXCEEDED",
+          message: "Upload no more than 10 images using the images field.",
+        },
+      });
+      return;
+    }
+
+    response.status(400).json({
+      error: {
+        code: "INVALID_MULTIPART_REQUEST",
+        message: "The multipart upload request is invalid.",
       },
     });
     return;

@@ -12,10 +12,12 @@ const configurablePercentageSchema = z.preprocess(
   z.coerce.number().min(0).max(100).default(90),
 );
 
+const recognitionProviderSchema = z.enum(["aws-rekognition", "fake"]);
+
 export const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
-  RECOGNITION_PROVIDER: z.literal("aws-rekognition").default("aws-rekognition"),
+  RECOGNITION_PROVIDER: recognitionProviderSchema.default("aws-rekognition"),
   AWS_REGION: z.string().min(1).default("us-east-1"),
   MONGODB_URI: mongoUriSchema.default("mongodb://127.0.0.1:27017"),
   MONGODB_DATABASE: z

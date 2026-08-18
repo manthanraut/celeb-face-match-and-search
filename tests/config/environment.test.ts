@@ -11,8 +11,17 @@ describe("parseEnvironment", () => {
       MONGODB_URI: "mongodb://127.0.0.1:27017",
       PORT: 3000,
       RECOGNITION_APPROVAL_THRESHOLD: 90,
+      RECOGNITION_PROVIDER: "aws-rekognition",
       UPLOAD_DIR: "data/uploads",
     });
+  });
+
+  it("supports the deterministic fake recognition provider", () => {
+    expect(parseEnvironment({ RECOGNITION_PROVIDER: "fake" }).RECOGNITION_PROVIDER).toBe("fake");
+  });
+
+  it("rejects an unsupported recognition provider", () => {
+    expect(() => parseEnvironment({ RECOGNITION_PROVIDER: "custom-provider" })).toThrow();
   });
 
   it("coerces a configurable recognition threshold", () => {
