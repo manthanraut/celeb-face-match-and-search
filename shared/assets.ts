@@ -64,9 +64,41 @@ export const assetRecognitionSchema = z.object({
   result: recognitionResultSchema.nullable(),
 });
 
+export const assetCelebrityAssociationSchema = z.object({
+  confidence: z.number().min(0).max(100).nullable(),
+  decision: z.enum(["APPROVED", "NEEDS_REVIEW"]),
+  displayName: z.string().min(1),
+  evidenceFields: z.array(z.enum(["title", "caption"])),
+  identityKey: z.string().min(1),
+  providerPersonId: z.string().min(1).nullable(),
+  source: z.enum(["recognition", "metadata-inference"]),
+});
+
+export const assetEnrichmentSchema = z.object({
+  associations: z.array(assetCelebrityAssociationSchema),
+  decisionEngineVersion: z.number().int().positive().nullable(),
+  evaluatedAt: z.string().datetime().nullable(),
+  recognitionRevision: z.number().int().positive().nullable(),
+  searchReady: z.boolean(),
+  sourceTextRevision: z.number().int().positive().nullable(),
+});
+
 export const assetDetailSchema = assetSchema.extend({
+  enrichment: assetEnrichmentSchema,
   recognition: assetRecognitionSchema,
 });
+
+export const assetMetadataUpdateSchema = z
+  .object({
+    title: z.string().max(500).nullable().optional(),
+    caption: z.string().max(5_000).nullable().optional(),
+    altText: z.string().max(2_000).nullable().optional(),
+  })
+  .strict()
+  .refine(
+    (metadata) => Object.values(metadata).some((value) => value !== undefined),
+    "Provide at least one metadata field.",
+  );
 
 export const assetUploadManifestSchema = z
   .array(
@@ -117,6 +149,7 @@ export const assetRecognitionRetryResponseSchema = z.object({
 export type Asset = z.infer<typeof assetSchema>;
 export type AssetDetail = z.infer<typeof assetDetailSchema>;
 export type AssetImageMimeType = z.infer<typeof assetImageMimeTypeSchema>;
+export type AssetMetadataUpdate = z.infer<typeof assetMetadataUpdateSchema>;
 export type AssetListResponse = z.infer<typeof assetListResponseSchema>;
 export type AssetRecognitionStatus = z.infer<typeof assetRecognitionStatusSchema>;
 export type AssetUploadManifest = z.infer<typeof assetUploadManifestSchema>;

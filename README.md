@@ -22,6 +22,10 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 - Asset list, detail, and image-serving APIs for the Copilot mock
 - Asynchronous AWS Rekognition worker with atomic claims, leases, retries, and recovery
 - Deterministic fake recognition provider for local development and tests
+- Versioned celebrity decision engine with editorial metadata corroboration
+- Revision-safe metadata updates and persisted approval/review decisions
+- Idempotent gallery-context updates with canonical event and year enrichment
+- Celebrity and alias retrieval with event/year filters and stable pagination
 - Preserved Python utilities for offline Rekognition experiments and benchmarking
 
 ## Current User Flow
@@ -38,8 +42,8 @@ Open /admin/photos/new
     → Review the Copilot-style photo details page
 ```
 
-The upload and recognition workflow, persisted asset model, and Copilot interface are
-ready. Metadata enrichment, search results, and the celebrity archive are planned next.
+The backend workflow from upload through celebrity search and archive retrieval is ready.
+The Verso result pages and demo corpus remain to be connected.
 
 ## Technology
 
@@ -149,6 +153,11 @@ Stop the development server with `Ctrl+C`.
 | `GET /api/assets/:assetId` | Ready | Asset metadata and recognition state |
 | `GET /api/assets/:assetId/image` | Ready | Stored image bytes |
 | `POST /api/assets/:assetId/recognition/retry` | Ready | Explicitly retry failed or indeterminate recognition |
+| `PATCH /api/assets/:assetId/metadata` | Ready | Save editorial metadata and recalculate celebrity decisions |
+| `PUT /api/galleries/:galleryId/context` | Ready | Synchronize gallery tags, publication state, and assets |
+| `DELETE /api/galleries/:galleryId/assets/:assetId` | Ready | Remove an asset from a gallery |
+| `GET /api/search` | Ready | Resolve a celebrity name or alias and return matching images |
+| `GET /api/celebrities/:celebritySlug` | Ready | Return a filtered celebrity archive |
 
 ## Asset Ingestion API
 
@@ -222,8 +231,9 @@ instead of being repeated without a known outcome.
 
 Provider responses are stored in raw and normalized forms. Only the normalized result and a
 safe error summary are returned by `GET /api/assets/:assetId`; raw provider payloads remain
-internal. Recognition does not create celebrity associations or change `searchReady` in this
-phase.
+internal. Successful recognition is evaluated immediately by the celebrity decision engine.
+The worker also reconciles completed results that were not enriched because a process stopped
+between the two operations.
 
 For local work without AWS credentials, set:
 
@@ -241,6 +251,95 @@ POST /api/assets/<asset-id>/recognition/retry
 
 The endpoint returns `202` after requeueing. Assets in `QUEUED`, `PROCESSING`, or `SUCCEEDED`
 state return `409` because only a terminal failure can be retried manually.
+
+## Metadata Enrichment and Decisions
+
+Decision engine version 1 uses the configured `RECOGNITION_APPROVAL_THRESHOLD`, which defaults
+to `90`. Each recognized celebrity produces one of two persisted decisions:
+
+| Scenario | Decision |
+| --- | --- |
+| Confidence is at or above the threshold | `APPROVED` |
+| Confidence is below the threshold and the celebrity appears in title or caption | `APPROVED` |
+| Confidence is below the threshold without title or caption evidence | `NEEDS_REVIEW` |
+| Recognition returns no celebrity and `X in Y` resolves `X` through the celebrity catalog | `APPROVED` metadata inference |
+| Recognition returns no celebrity and `X` is not in the catalog | No association |
+
+Alt text is stored but is not identity evidence. Review candidates remain persisted, while
+`searchReady` becomes `true` only when at least one association is approved. Multiple faces are
+evaluated independently and repeated matches for the same celebrity are consolidated.
+
+Save one or more editorial fields with:
+
+```bash
+curl -X PATCH http://localhost:3000/api/assets/<asset-id>/metadata \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Rihanna in Marc Jacobs","caption":"Rihanna arrives at the Met Gala"}'
+```
+
+Every metadata save recalculates decisions from the stored recognition result without calling
+Rekognition again. Source-text and recognition revisions are checked in the same atomic MongoDB
+write, so a concurrent recognition completion or editorial save cannot publish stale decisions.
+Metadata-only `X in Y` inference is intentionally catalog-gated; Phase 7 will provide the demo
+catalog seed command.
+
+## Gallery Context and Event Enrichment
+
+Send the complete gallery snapshot whenever a gallery is saved or published:
+
+```bash
+curl -X PUT http://localhost:3000/api/galleries/met-gala-2027/context \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "assetIds":["64b000000000000000000001"],
+    "published":true,
+    "tags":["fashion","Met Gala 2027","storytype:news-and-trending"]
+  }'
+```
+
+The endpoint accepts up to 500 unique asset IDs and verifies that each asset exists before
+changing gallery usages. It recognizes Met Gala, Grammys, Oscars, Golden Globes, and Vogue
+World when a known event and a year from 1900 through 2199 appear in the same tag. Unsupported
+tags retain the gallery relationship without event context. Conflicting event or year tags
+return `400` rather than choosing one based on tag order.
+
+Each asset-and-gallery pair is upserted idempotently. Resending a snapshot preserves its
+original `addedAt`, while tag and publication changes update all current usages and omitted
+assets are removed. Gallery changes never enqueue or rerun recognition. A CMS asset-removal
+event can also call:
+
+```text
+DELETE /api/galleries/<gallery-id>/assets/<asset-id>
+```
+
+## Verso Search and Celebrity Archives
+
+Search uses exact normalized celebrity names and aliases from the celebrity catalog. It deliberately
+does not perform semantic ranking or designer lookup in this phase:
+
+```bash
+curl 'http://localhost:3000/api/search?query=Robyn%20Rihanna%20Fenty&event=met-gala&year=2027&limit=20'
+```
+
+When the query resolves, the response includes the canonical celebrity, matching image records, and
+an opaque `nextCursor`. An unknown celebrity returns an empty result with `celebrity: null`. Alias
+collisions return `409` instead of selecting a celebrity arbitrarily.
+
+Open the reusable cross-event archive with the canonical slug:
+
+```bash
+curl 'http://localhost:3000/api/celebrities/rihanna?event=oscars&year=2026'
+```
+
+Both endpoints accept optional `event`, `year`, `limit`, and `cursor` parameters. `limit` defaults to
+20 and is capped at 100. Results are ordered by gallery `addedAt`, followed by stable asset and gallery
+tie-breakers. Cursors are bound to the celebrity and filters, so they cannot be reused against a
+different result set.
+
+Retrieval starts from published gallery usages and returns only assets whose requested celebrity
+association is `APPROVED`. The stored decision-engine version, recognition revision, and source-text
+revision must still match the asset's current state. Review-only, stale, draft, and failed-recognition
+records are excluded.
 
 ## Environment Configuration
 
@@ -331,13 +430,15 @@ celeb-face-match-and-search/
 │   ├── index.ts                  # Process startup and dependency composition
 │   ├── lifecycle.ts              # HTTP, frontend, and database lifecycle
 │   ├── middleware/               # Consistent API errors
-│   ├── modules/recognition/       # Recognition provider boundary
-│   ├── repositories/             # Asset persistence boundary and Mongo implementation
+│   ├── modules/                  # Recognition and gallery event-domain logic
+│   ├── repositories/             # Asset and gallery persistence boundaries
 │   ├── routes/                   # API routes
-│   ├── services/                 # Asset ingestion orchestration
+│   ├── services/                 # Asset and gallery orchestration
 │   └── storage/                  # Local image-storage boundary
 ├── shared/
 │   ├── assets.ts                 # Asset API schemas and types
+│   ├── galleries.ts              # Gallery API schemas and canonical events
+│   ├── search.ts                 # Verso search and archive API contracts
 │   └── contracts/                # Shared recognition schemas and types
 ├── data/
 │   ├── uploads/                  # Ignored local uploads

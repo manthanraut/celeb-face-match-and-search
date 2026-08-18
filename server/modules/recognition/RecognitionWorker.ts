@@ -24,6 +24,10 @@ export interface RecognitionWorkerOptions {
 
 export interface RecognitionWorkerDependencies {
   clock?: () => Date;
+  enrichmentService: {
+    evaluateAsset(assetId: string): Promise<boolean>;
+    evaluateNextPending(): Promise<boolean>;
+  };
   logger?: Pick<Console, "error">;
   options?: Partial<RecognitionWorkerOptions>;
   provider: RecognitionProvider;
@@ -52,6 +56,7 @@ class RecognitionInputError extends Error {
 
 export class RecognitionWorker {
   readonly #clock: () => Date;
+  readonly #enrichmentService: RecognitionWorkerDependencies["enrichmentService"];
   readonly #logger: Pick<Console, "error">;
   readonly #options: RecognitionWorkerOptions;
   readonly #provider: RecognitionProvider;
@@ -65,6 +70,7 @@ export class RecognitionWorker {
 
   constructor({
     clock = () => new Date(),
+    enrichmentService,
     logger = console,
     options = {},
     provider,
@@ -72,6 +78,7 @@ export class RecognitionWorker {
     storage,
   }: RecognitionWorkerDependencies) {
     this.#clock = clock;
+    this.#enrichmentService = enrichmentService;
     this.#logger = logger;
     this.#options = { ...defaultRecognitionWorkerOptions, ...options };
     this.#provider = provider;
@@ -112,6 +119,13 @@ export class RecognitionWorker {
   }
 
   async runOnce(): Promise<boolean> {
+    let enrichedPendingAsset = false;
+    try {
+      enrichedPendingAsset = await this.#enrichmentService.evaluateNextPending();
+    } catch {
+      this.#logger.error("Pending celebrity enrichment failed.");
+    }
+
     const now = this.#clock();
     await this.#repository.recoverExpiredRecognitionJobs(now, this.#options.maxAttempts);
     const job = await this.#repository.claimRecognitionJob({
@@ -123,7 +137,7 @@ export class RecognitionWorker {
       workerId: this.#options.workerId,
     });
     if (!job) {
-      return false;
+      return enrichedPendingAsset;
     }
 
     await this.#processJob(job);
@@ -161,11 +175,20 @@ export class RecognitionWorker {
         signal: abortController.signal,
       });
       const normalizedResult = recognitionResultSchema.parse(response.normalizedResult);
-      await this.#repository.completeRecognitionJob(
+      const completed = await this.#repository.completeRecognitionJob(
         job,
         { normalizedResult, rawResult: response.rawResult },
         this.#clock(),
       );
+      if (completed) {
+        try {
+          await this.#enrichmentService.evaluateAsset(job.assetId);
+        } catch {
+          // The result is durably stored and will be picked up by the pending
+          // enrichment scan on a later worker iteration.
+          this.#logger.error("Celebrity enrichment after recognition failed.");
+        }
+      }
     } catch (error) {
       if (this.#stopping) {
         await this.#repository.releaseRecognitionJob(job, this.#clock());

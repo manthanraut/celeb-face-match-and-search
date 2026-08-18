@@ -112,6 +112,9 @@ function makeRecord({
 }
 
 function createHarness() {
+  const enrichmentService = {
+    updateMetadata: vi.fn(async () => makeRecord()),
+  };
   const repository: AssetRepository = {
     findByClientAssetIds: vi.fn(async () => new Map()),
     findById: vi.fn(async () => null),
@@ -127,8 +130,14 @@ function createHarness() {
   };
 
   return {
+    enrichmentService,
     repository,
-    service: new AssetService({ clock: () => FIXED_TIME, repository, storage }),
+    service: new AssetService({
+      clock: () => FIXED_TIME,
+      enrichmentService,
+      repository,
+      storage,
+    }),
     storage,
   };
 }
@@ -567,10 +576,58 @@ describe("AssetService reads", () => {
     expect(JSON.stringify(detail)).not.toContain("must-not-leak");
   });
 
+  it("delegates metadata saves and maps the updated enrichment detail", async () => {
+    const { enrichmentService, service } = createHarness();
+    const updated = makeRecord({
+      recognition: {
+        normalizedResult: {
+          faces: [],
+          model: "RecognizeCelebrities",
+          provider: "aws-rekognition",
+          schemaVersion: "1.0",
+          unrecognizedFaceCount: 0,
+          warnings: [],
+        },
+        revision: 2,
+        status: "SUCCEEDED",
+      },
+    });
+    updated.sourceText = { ...updated.sourceText, revision: 2, title: "Rihanna in Marc Jacobs" };
+    updated.enrichment = {
+      associations: [],
+      decisionEngineVersion: 1,
+      evaluatedAt: FIXED_TIME,
+      recognitionRevision: 2,
+      searchReady: false,
+      sourceTextRevision: 2,
+    };
+    vi.mocked(enrichmentService.updateMetadata).mockResolvedValue(updated);
+
+    const detail = await service.updateMetadata(FIRST_ASSET_ID, {
+      title: "Rihanna in Marc Jacobs",
+    });
+
+    expect(enrichmentService.updateMetadata).toHaveBeenCalledWith(FIRST_ASSET_ID, {
+      title: "Rihanna in Marc Jacobs",
+    });
+    expect(detail).toMatchObject({
+      enrichment: {
+        associations: [],
+        decisionEngineVersion: 1,
+        evaluatedAt: FIXED_TIME.toISOString(),
+        recognitionRevision: 2,
+        searchReady: false,
+        sourceTextRevision: 2,
+      },
+      sourceText: { revision: 2, title: "Rihanna in Marc Jacobs" },
+    });
+  });
+
   it("explicitly requeues only retryable terminal recognition states", async () => {
-    const { repository, storage } = createHarness();
+    const { enrichmentService, repository, storage } = createHarness();
     const service = new AssetService({
       clock: () => FIXED_TIME,
+      enrichmentService,
       recognitionProviderName: "fake",
       repository,
       storage,

@@ -60,7 +60,11 @@ export interface AssetRecord {
   };
   enrichment: {
     associations: AssetCelebrityAssociation[];
+    decisionEngineVersion?: number;
+    evaluatedAt?: Date;
+    recognitionRevision?: number;
     searchReady: boolean;
+    sourceTextRevision?: number;
   };
   createdAt: Date;
   updatedAt: Date;

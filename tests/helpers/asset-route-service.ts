@@ -11,5 +11,6 @@ export function createUnusedAssetRouteService(): AssetRouteService {
     list: unexpectedCall,
     openImage: unexpectedCall,
     retryRecognition: unexpectedCall,
+    updateMetadata: unexpectedCall,
   };
 }
