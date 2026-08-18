@@ -15,6 +15,7 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 - React and Express served by one development process
 - Shared, validated recognition-result contract
 - AWS Rekognition SDK and server-side provider configuration
+- MongoDB connection lifecycle, readiness check, and idempotent index initialization
 - Preserved Python utilities for offline Rekognition experiments and benchmarking
 
 ## Current User Flow
@@ -26,8 +27,8 @@ Open application
     → Discover page placeholder
 ```
 
-The upload workflow, AWS API endpoint, database, search results, and celebrity archive
-are planned next; they are not implemented yet.
+The upload workflow, persisted asset models, AWS API endpoint, search results, and
+celebrity archive are planned next; they are not implemented yet.
 
 ## Technology
 
@@ -46,6 +47,7 @@ are planned next; they are not implemented yet.
 
 - Node.js 20.14 or newer
 - npm 10 or newer
+- A local MongoDB instance for backend development
 - Internet access for the sample gallery image
 - AWS credentials only when working on Rekognition features
 
@@ -64,6 +66,9 @@ Install dependencies and create a local environment file:
 npm install
 cp .env.example .env
 ```
+
+Make sure MongoDB is running before starting the application. The default configuration
+connects to `mongodb://127.0.0.1:27017` and uses the `celeb_face_match` database.
 
 Start the application:
 
@@ -92,6 +97,23 @@ Expected response:
 }
 ```
 
+Verify that MongoDB is ready at:
+
+```text
+http://localhost:3000/api/ready
+```
+
+Expected response:
+
+```json
+{
+  "status": "ready",
+  "checks": {
+    "database": "up"
+  }
+}
+```
+
 Stop the development server with `Ctrl+C`.
 
 ## Available Routes
@@ -108,14 +130,15 @@ Stop the development server with `Ctrl+C`.
 | `/admin/photos/new` | Placeholder | Photo upload and analysis form |
 | `/admin/photos/:assetId` | Placeholder | Photo and recognition details |
 | `/api/health` | Ready | API and provider health check |
+| `/api/ready` | Ready | MongoDB-backed application readiness check |
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start Express with Vite development middleware |
-| `npm run typecheck` | Validate browser, shared, and server TypeScript |
-| `npm test` | Run the Vitest suite |
+| `npm run typecheck` | Validate browser, shared, server, and test TypeScript |
+| `npm test` | Run the Vitest suite; MongoDB integration tests are skipped unless configured |
 | `npm run build` | Type-check and build the client and server |
 | `NODE_ENV=production npm start` | Serve an existing production build |
 
@@ -126,6 +149,15 @@ npm run build
 NODE_ENV=production npm start
 ```
 
+Run the MongoDB integration tests against the local instance explicitly:
+
+```bash
+TEST_MONGODB_URI=mongodb://127.0.0.1:27017 \
+  npm test -- tests/database/mongo.integration.test.ts
+```
+
+The integration suite creates a uniquely named test database and drops it when the run finishes.
+
 ## Environment Configuration
 
 Copy `.env.example` to `.env`. The initial configuration is:
@@ -135,6 +167,10 @@ NODE_ENV=development
 PORT=3000
 RECOGNITION_PROVIDER=aws-rekognition
 AWS_REGION=us-east-1
+MONGODB_URI=mongodb://127.0.0.1:27017
+MONGODB_DATABASE=celeb_face_match
+UPLOAD_DIR=data/uploads
+RECOGNITION_APPROVAL_THRESHOLD=90
 ```
 
 The web application currently accepts only:
@@ -176,6 +212,7 @@ Browser
    ↓
 Express server
    ├── /api/*  → API routes and future AWS/database services
+   ├── MongoDB  → metadata, recognition state and gallery usage
    └── /*       → React application through Vite or the production build
 ```
 
@@ -191,7 +228,10 @@ celeb-face-match-and-search/
 │   ├── pages/                    # Gallery and future feature pages
 │   └── styles/                   # Tailwind and global styles
 ├── server/                       # Express API
+│   ├── app.ts                    # Testable Express application factory
 │   ├── config/                   # Environment validation
+│   ├── database/                 # MongoDB lifecycle and indexes
+│   ├── middleware/               # Consistent API errors
 │   ├── recognition/              # Recognition provider boundary
 │   └── routes/                   # API routes
 ├── shared/                       # Browser/server contracts and schemas
@@ -205,6 +245,9 @@ celeb-face-match-and-search/
 ├── package.json
 ├── tsconfig.json
 ├── tsconfig.server.json
+├── tsconfig.test.json
+├── vitest.config.ts
+├── BACKEND_IMPLEMENTATION_CHECKLIST.md
 └── vite.config.ts
 ```
 
@@ -318,7 +361,7 @@ Do not push directly to `main`.
 Do not commit:
 
 - `.env` files or AWS credentials
-- Local SQLite databases
+- Local database exports
 - Files under `data/uploads/`
 - Raw recognition-result files
 - Unapproved or unlicensed photographs
