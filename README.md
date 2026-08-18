@@ -11,6 +11,8 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 
 - Responsive Met Gala 2026 editorial gallery
 - CTA from the gallery to celebrity image discovery
+- Copilot-simulated photo selection with drag and drop, multi-select, and preview cards
+- Copilot-style photo details, editable metadata, taxonomy, and crop previews
 - Placeholder routes for search, bookmarks, celebrity archives, and editor tools
 - React and Express served by one development process
 - Shared, validated recognition-result contract
@@ -24,10 +26,15 @@ Open application
     → Met Gala 2026 gallery
     → Explore Celebrity Photos CTA
     → Discover page placeholder
+
+Open /admin/photos/new
+    → Select one or more local photos
+    → Open Edit Photo in a new tab
+    → Review the Copilot-style photo details page
 ```
 
-The upload workflow, AWS API endpoint, database, search results, and celebrity archive
-are planned next; they are not implemented yet.
+Backend upload persistence, the AWS API endpoint, database, search results, and the
+celebrity archive are planned next; they are not implemented yet.
 
 ## Technology
 
@@ -105,8 +112,8 @@ Stop the development server with `Ctrl+C`.
 | `/bookmarks` | Placeholder | Saved photographs |
 | `/admin` | Placeholder | Internal dashboard |
 | `/admin/photos` | Placeholder | Photo library |
-| `/admin/photos/new` | Placeholder | Photo upload and analysis form |
-| `/admin/photos/:assetId` | Placeholder | Photo and recognition details |
+| `/admin/photos/new` | Ready | Local image selection and preview-card grid |
+| `/admin/photos/:assetId` | Ready | Copilot-style photo metadata, taxonomy, and crop previews |
 | `/api/health` | Ready | API and provider health check |
 
 ## Commands
@@ -186,15 +193,29 @@ built React files from `dist/`.
 
 ```text
 celeb-face-match-and-search/
-├── src/                          # React application
-│   ├── app/                      # Providers, router, and application shell
-│   ├── pages/                    # Gallery and future feature pages
-│   └── styles/                   # Tailwind and global styles
-├── server/                       # Express API
+├── src/
+│   ├── app/                      # App composition, providers, and router
+│   ├── surfaces/
+│   │   ├── verso/                # Public gallery/discovery experience
+│   │   │   ├── VersoLayout.tsx
+│   │   │   └── pages/
+│   │   └── copilot/              # Internal editorial experience
+│   │       ├── CopilotLayout.tsx
+│   │       ├── components/
+│   │       └── pages/
+│   ├── features/
+│   │   └── assets/               # Shared photo metadata and crop logic
+│   ├── components/               # UI shared by both surfaces
+│   └── styles/global.css
+├── server/
+│   ├── app.ts                    # Testable Express app configuration
+│   ├── index.ts                  # HTTP process startup and client serving
 │   ├── config/                   # Environment validation
-│   ├── recognition/              # Recognition provider boundary
-│   └── routes/                   # API routes
-├── shared/                       # Browser/server contracts and schemas
+│   ├── routes/                   # Top-level API composition
+│   └── modules/
+│       └── recognition/          # Recognition provider boundary
+├── shared/
+│   └── contracts/                # Browser/server schemas and types
 ├── data/
 │   ├── uploads/                  # Ignored local uploads
 │   └── recognition-results/      # Ignored local AI responses

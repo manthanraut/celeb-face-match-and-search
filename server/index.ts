@@ -2,17 +2,13 @@ import express from "express";
 import path from "node:path";
 import { createServer as createViteServer } from "vite";
 
+import { createApp } from "./app.js";
 import { environment } from "./config/env.js";
-import { apiRouter } from "./routes/api.js";
 
 const projectRoot = process.cwd();
 
 async function startServer() {
-  const app = express();
-
-  app.disable("x-powered-by");
-  app.use(express.json({ limit: "1mb" }));
-  app.use("/api", apiRouter);
+  const app = createApp();
 
   if (environment.NODE_ENV === "production") {
     const clientBuildPath = path.join(projectRoot, "dist");
