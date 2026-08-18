@@ -4,6 +4,7 @@ import { createApp } from "../../server/app.js";
 import { createUnusedAssetRouteService } from "../helpers/asset-route-service.js";
 import { createUnusedGalleryRouteService } from "../helpers/gallery-route-service.js";
 import { startTestHttpServer } from "../helpers/http-server.js";
+import { createUnusedVersoSearchRouteService } from "../helpers/verso-search-route-service.js";
 
 describe("API health", () => {
   it("returns liveness without querying MongoDB", async () => {
@@ -14,6 +15,7 @@ describe("API health", () => {
         checkDatabaseReadiness,
         galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
       }),
     );
 
@@ -39,6 +41,7 @@ describe("API health", () => {
         checkDatabaseReadiness,
         galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
       }),
     );
 
@@ -64,6 +67,7 @@ describe("API health", () => {
         checkDatabaseReadiness,
         galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
       }),
     );
 
@@ -91,6 +95,7 @@ describe("API errors", () => {
         checkDatabaseReadiness: () => Promise.resolve(),
         galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
       }),
     );
 
@@ -116,6 +121,7 @@ describe("API errors", () => {
         checkDatabaseReadiness: () => Promise.resolve(),
         galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
       }),
     );
 
@@ -145,6 +151,7 @@ describe("API errors", () => {
         checkDatabaseReadiness: () => Promise.resolve(),
         galleryService: createUnusedGalleryRouteService(),
         recognitionProvider: "aws-rekognition",
+        versoSearchService: createUnusedVersoSearchRouteService(),
       }),
     );
 
