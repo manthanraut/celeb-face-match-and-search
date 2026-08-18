@@ -11,12 +11,15 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 
 - Responsive Met Gala 2026 editorial gallery
 - CTA from the gallery to celebrity image discovery
-- Copilot-simulated photo selection with drag and drop, multi-select, and preview cards
-- Copilot-style photo details, editable metadata, taxonomy, and crop previews
+- Copilot-simulated photo upload with drag and drop, multi-select, and persisted preview cards
+- Asynchronous AWS celebrity recognition with queued, processing, completed, and failed states
+- Raw and normalized recognition results mapped to a stable photo asset ID
+- Confidence and editorial-text decision rules for accepted and needs-review matches
+- Copilot-style photo details, editable metadata, taxonomy, crop previews, and recognition retry
 - Placeholder routes for search, bookmarks, celebrity archives, and editor tools
 - React and Express served by one development process
 - Shared, validated recognition-result contract
-- AWS Rekognition SDK and server-side provider configuration
+- AWS Rekognition `RecognizeCelebrities` provider using the SDK's environment credential chain
 - Preserved Python utilities for offline Rekognition experiments and benchmarking
 
 ## Current User Flow
@@ -28,13 +31,23 @@ Open application
     → Discover page placeholder
 
 Open /admin/photos/new
-    → Select one or more local photos
+    → Upload one or more JPEG or PNG photos
+    → Store the photo and queue AWS recognition
     → Open Edit Photo in a new tab
-    → Review the Copilot-style photo details page
+    → Watch AI & Discovery Metadata update automatically
+    → Save title/caption/alt text to recalculate discovery decisions
 ```
 
-Backend upload persistence, the AWS API endpoint, database, search results, and the
-celebrity archive are planned next; they are not implemented yet.
+Search results and the celebrity archive remain future work. The current hackathon
+backend uses intentionally simple local file and JSON persistence rather than a database.
+
+## Celebrity Approval Rules
+
+- AWS matches at or above 99% confidence are approved automatically.
+- AWS matches below 99% are approved when the celebrity name appears in the title or global caption; otherwise they need review.
+- When AWS returns no celebrity match, metadata in the form `Celebrity in Designer` creates an approved metadata-only association.
+- When neither AWS nor the metadata identifies a celebrity, no celebrity association is created.
+- Saving metadata recalculates these decisions from the stored AWS result and does not call Rekognition again.
 
 ## Technology
 
@@ -54,7 +67,7 @@ celebrity archive are planned next; they are not implemented yet.
 - Node.js 20.14 or newer
 - npm 10 or newer
 - Internet access for the sample gallery image
-- AWS credentials only when working on Rekognition features
+- AWS credentials with `rekognition:RecognizeCelebrities` permission for live recognition
 
 ## Quick Start
 
@@ -112,9 +125,14 @@ Stop the development server with `Ctrl+C`.
 | `/bookmarks` | Placeholder | Saved photographs |
 | `/admin` | Placeholder | Internal dashboard |
 | `/admin/photos` | Placeholder | Photo library |
-| `/admin/photos/new` | Ready | Local image selection and preview-card grid |
-| `/admin/photos/:assetId` | Ready | Copilot-style photo metadata, taxonomy, and crop previews |
+| `/admin/photos/new` | Ready | Persist image uploads and queue celebrity recognition |
+| `/admin/photos/:assetId` | Ready | Photo metadata, recognition state/results, taxonomy, and crops |
 | `/api/health` | Ready | API and provider health check |
+| `POST /api/assets` | Ready | Store a JPEG/PNG and asynchronously queue recognition |
+| `GET /api/assets/:assetId` | Ready | Read the asset, decisions, and raw provider response |
+| `GET /api/assets/:assetId/image` | Ready | Read the locally stored original image |
+| `PATCH /api/assets/:assetId/metadata` | Ready | Save source text and recalculate decisions without AWS |
+| `POST /api/assets/:assetId/recognition` | Ready | Queue another recognition attempt |
 
 ## Commands
 
@@ -142,6 +160,9 @@ NODE_ENV=development
 PORT=3000
 RECOGNITION_PROVIDER=aws-rekognition
 AWS_REGION=us-east-1
+LOCAL_DATA_DIRECTORY=data
+MAX_UPLOAD_BYTES=5242880
+RECOGNITION_AUTO_APPROVE_THRESHOLD=99
 ```
 
 The web application currently accepts only:
@@ -152,8 +173,9 @@ RECOGNITION_PROVIDER=aws-rekognition
 
 ### AWS Credentials
 
-AWS credentials are not needed to view the gallery or work on frontend pages. They
-will be required when the Rekognition endpoint is implemented.
+AWS credentials are not needed to view the gallery or existing asset pages. An upload
+is saved immediately, but its asynchronous recognition job will enter the failed state
+when no valid AWS credential source is available.
 
 Prefer an AWS profile or temporary credentials configured outside the repository:
 
@@ -182,7 +204,11 @@ The project is one application, not separately deployed frontend and backend ser
 Browser
    ↓
 Express server
-   ├── /api/*  → API routes and future AWS/database services
+   ├── /api/assets → local asset storage and metadata endpoints
+   │                    ↓
+   │               in-process queue → AWS Rekognition
+   │                    ↓
+   │               raw response + normalized decisions
    └── /*       → React application through Vite or the production build
 ```
 
@@ -212,12 +238,15 @@ celeb-face-match-and-search/
 │   ├── index.ts                  # HTTP process startup and client serving
 │   ├── config/                   # Environment validation
 │   ├── routes/                   # Top-level API composition
+│   ├── storage/                  # Safe local file-storage adapter
 │   └── modules/
-│       └── recognition/          # Recognition provider boundary
+│       ├── assets/               # Upload, metadata, and asset repository
+│       └── recognition/          # AWS provider, worker, and decision engine
 ├── shared/
 │   └── contracts/                # Browser/server schemas and types
 ├── data/
 │   ├── uploads/                  # Ignored local uploads
+│   ├── assets/                   # Ignored photo asset JSON documents
 │   └── recognition-results/      # Ignored local AI responses
 ├── tools/
 │   ├── facerecognition_app/      # Existing Python proof of concept

@@ -5,10 +5,12 @@ import {
   createSelectedPhoto,
   type SelectedPhoto,
 } from "../../../../features/assets/photoSelection";
+import { uploadPhotoAsset } from "../../../../features/assets/api";
 
 import { SelectedPhotoCard } from "./SelectedPhotoCard";
 
-const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
+const MAXIMUM_FILE_SIZE = 5 * 1024 * 1024;
 
 function UploadIcon() {
   return (
@@ -43,7 +45,7 @@ export function PhotoUploadPage() {
     files.forEach((file) => {
       const signature = createFileSignature(file);
 
-      if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
+      if (!ACCEPTED_IMAGE_TYPES.has(file.type) || file.size > MAXIMUM_FILE_SIZE) {
         invalidCount += 1;
         return;
       }
@@ -67,13 +69,32 @@ export function PhotoUploadPage() {
     }
 
     setIsPreparing(true);
-    setMessage("Preparing image previews…");
+    setMessage("Uploading images and queuing celebrity recognition…");
 
     const preparedPhotos = await Promise.all(
       acceptedFiles.map(async (file) => {
+        let localPreviewUrl: string | null = null;
+
         try {
-          return await createSelectedPhoto(file);
+          const selectedPhoto = await createSelectedPhoto(file);
+          localPreviewUrl = selectedPhoto.previewUrl;
+          const asset = await uploadPhotoAsset({
+            file,
+            height: selectedPhoto.height,
+            width: selectedPhoto.width,
+          });
+
+          URL.revokeObjectURL(selectedPhoto.previewUrl);
+          localPreviewUrl = null;
+          return {
+            ...selectedPhoto,
+            id: asset.id,
+            previewUrl: asset.image.url,
+          };
         } catch {
+          if (localPreviewUrl) {
+            URL.revokeObjectURL(localPreviewUrl);
+          }
           selectedSignaturesRef.current.delete(createFileSignature(file));
           invalidCount += 1;
           return null;
@@ -82,16 +103,15 @@ export function PhotoUploadPage() {
     );
 
     const validPhotos = preparedPhotos.filter((photo): photo is SelectedPhoto => photo !== null);
-    validPhotos.forEach((photo) => objectUrlsRef.current.add(photo.previewUrl));
     setSelectedPhotos((currentPhotos) => [...currentPhotos, ...validPhotos]);
     setIsPreparing(false);
 
-    const messageParts = [`${validPhotos.length} ${validPhotos.length === 1 ? "image" : "images"} selected.`];
+    const messageParts = [`${validPhotos.length} ${validPhotos.length === 1 ? "image was" : "images were"} uploaded and queued for recognition.`];
     if (duplicateCount > 0) {
       messageParts.push(`${duplicateCount} duplicate ${duplicateCount === 1 ? "was" : "were"} skipped.`);
     }
     if (invalidCount > 0) {
-      messageParts.push(`${invalidCount} unsupported ${invalidCount === 1 ? "file was" : "files were"} skipped.`);
+      messageParts.push(`${invalidCount} invalid ${invalidCount === 1 ? "file was" : "files were"} skipped or failed to upload.`);
     }
     setMessage(messageParts.join(" "));
   }, []);
@@ -107,8 +127,6 @@ export function PhotoUploadPage() {
   const handleRemovePhoto = useCallback((photo: SelectedPhoto) => {
     setSelectedPhotos((currentPhotos) => currentPhotos.filter((currentPhoto) => currentPhoto.id !== photo.id));
     selectedSignaturesRef.current.delete(createFileSignature(photo.file));
-    objectUrlsRef.current.delete(photo.previewUrl);
-    URL.revokeObjectURL(photo.previewUrl);
     setMessage(`${photo.name} removed. You can select it again.`);
   }, []);
 
@@ -147,7 +165,7 @@ export function PhotoUploadPage() {
           <div className="text-center">
             <p className="text-lg font-bold">Drag files here</p>
             <input
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png"
               className="peer sr-only"
               disabled={isPreparing}
               id="photo-file-input"
@@ -163,7 +181,7 @@ export function PhotoUploadPage() {
               <UploadIcon />
               {isPreparing ? "Preparing…" : "Upload"}
             </label>
-            <p className="mt-3 text-xs text-neutral-500">JPG, PNG, or WebP · Select one or multiple images</p>
+            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Up to 5 MB each · Select one or multiple images</p>
           </div>
         </div>
 

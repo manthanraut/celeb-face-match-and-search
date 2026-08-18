@@ -60,17 +60,7 @@ export async function createSelectedPhoto(file: File): Promise<SelectedPhoto> {
 }
 
 export function createPhotoEditUrl(photo: SelectedPhoto) {
-  const searchParams = new URLSearchParams({
-    height: String(photo.height),
-    lastModified: String(photo.file.lastModified),
-    name: photo.name,
-    previewUrl: photo.previewUrl,
-    size: String(photo.size),
-    type: photo.type,
-    width: String(photo.width),
-  });
-
-  return `/admin/photos/${photo.id}?${searchParams.toString()}`;
+  return `/admin/photos/${photo.id}`;
 }
 
 export function formatFileSize(bytes: number) {

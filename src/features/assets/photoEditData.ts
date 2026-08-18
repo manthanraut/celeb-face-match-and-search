@@ -48,6 +48,19 @@ export function readPhotoEditData(searchParams: URLSearchParams, assetId: string
   };
 }
 
+export function createPhotoEditData(asset: PhotoAsset): PhotoEditData {
+  return {
+    assetId: asset.id,
+    height: asset.image.height,
+    lastModified: Date.parse(asset.updatedAt),
+    name: asset.image.originalFileName,
+    previewUrl: asset.image.url,
+    size: asset.image.size,
+    type: asset.image.mimeType,
+    width: asset.image.width,
+  };
+}
+
 export function createPhotoCrops(width: number, height: number): PhotoCrop[] {
   const originalRatio = width / height;
 
@@ -72,3 +85,4 @@ export function formatFileType(type: string) {
   const subtype = type.split("/")[1];
   return subtype ? subtype.toUpperCase() : type.toUpperCase();
 }
+import type { PhotoAsset } from "../../../shared/contracts/assets";
