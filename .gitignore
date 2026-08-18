@@ -1,3 +1,15 @@
 .venv/
 __pycache__/
 *.pyc
+
+node_modules/
+dist/
+dist-server/
+.env
+.env.local
+.DS_Store
+
+data/uploads/*
+!data/uploads/.gitkeep
+data/recognition-results/*
+!data/recognition-results/.gitkeep

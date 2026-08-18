@@ -1,219 +1,329 @@
-# Face Recognition App
+# Celebrity Image Discovery
 
-Minimal starter for running Amazon Rekognition celebrity recognition against images in a local folder on your Mac.
+A hackathon prototype that demonstrates how celebrity recognition can turn editorial
+photography into a searchable discovery experience.
 
-## 1. Install the Python dependency
+The application currently presents a Vogue-inspired Met Gala gallery with a call to
+action that leads into the planned celebrity image search. It runs the React frontend
+and Express API from one TypeScript project and is configured for AWS Rekognition.
 
-```bash
-python3 -m pip install -r requirements.txt
+## Current Features
+
+- Responsive Met Gala 2026 editorial gallery
+- CTA from the gallery to celebrity image discovery
+- Placeholder routes for search, bookmarks, celebrity archives, and editor tools
+- React and Express served by one development process
+- Shared, validated recognition-result contract
+- AWS Rekognition SDK and server-side provider configuration
+- Preserved Python utilities for offline Rekognition experiments and benchmarking
+
+## Current User Flow
+
+```text
+Open application
+    → Met Gala 2026 gallery
+    → Explore Celebrity Photos CTA
+    → Discover page placeholder
 ```
 
-## 2. Configure AWS credentials
+The upload workflow, AWS API endpoint, database, search results, and celebrity archive
+are planned next; they are not implemented yet.
 
-You do not need the AWS CLI for the first version. `boto3` can read credentials from environment variables or from the standard AWS credentials file.
+## Technology
 
-### Option A: Environment variables
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- React Router
+- TanStack Query
+- Node.js and Express
+- Zod
+- AWS SDK for Rekognition
+- Vitest
+
+## Requirements
+
+- Node.js 20.14 or newer
+- npm 10 or newer
+- Internet access for the sample gallery image
+- AWS credentials only when working on Rekognition features
+
+## Quick Start
+
+Clone your fork and enter the project:
+
+```bash
+git clone https://github.com/<your-username>/celeb-face-match-and-search.git
+cd celeb-face-match-and-search
+```
+
+Install dependencies and create a local environment file:
+
+```bash
+npm install
+cp .env.example .env
+```
+
+Start the application:
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+The root URL redirects to the Met Gala gallery. Verify the API process at:
+
+```text
+http://localhost:3000/api/health
+```
+
+Expected response:
+
+```json
+{
+  "status": "ok",
+  "recognitionProvider": "aws-rekognition"
+}
+```
+
+Stop the development server with `Ctrl+C`.
+
+## Available Routes
+
+| Route | Status | Purpose |
+| --- | --- | --- |
+| `/` | Ready | Redirects to the sample gallery |
+| `/galleries/met-gala-2026` | Ready | Vogue-inspired gallery and discovery CTA |
+| `/discover` | Placeholder | Search hub and image results |
+| `/celebrities/:celebritySlug` | Placeholder | Celebrity archive |
+| `/bookmarks` | Placeholder | Saved photographs |
+| `/admin` | Placeholder | Internal dashboard |
+| `/admin/photos` | Placeholder | Photo library |
+| `/admin/photos/new` | Placeholder | Photo upload and analysis form |
+| `/admin/photos/:assetId` | Placeholder | Photo and recognition details |
+| `/api/health` | Ready | API and provider health check |
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start Express with Vite development middleware |
+| `npm run typecheck` | Validate browser, shared, and server TypeScript |
+| `npm test` | Run the Vitest suite |
+| `npm run build` | Type-check and build the client and server |
+| `NODE_ENV=production npm start` | Serve an existing production build |
+
+To verify the production build locally:
+
+```bash
+npm run build
+NODE_ENV=production npm start
+```
+
+## Environment Configuration
+
+Copy `.env.example` to `.env`. The initial configuration is:
+
+```env
+NODE_ENV=development
+PORT=3000
+RECOGNITION_PROVIDER=aws-rekognition
+AWS_REGION=us-east-1
+```
+
+The web application currently accepts only:
+
+```env
+RECOGNITION_PROVIDER=aws-rekognition
+```
+
+### AWS Credentials
+
+AWS credentials are not needed to view the gallery or work on frontend pages. They
+will be required when the Rekognition endpoint is implemented.
+
+Prefer an AWS profile or temporary credentials configured outside the repository:
+
+```bash
+export AWS_PROFILE="your-profile"
+export AWS_REGION="us-east-1"
+```
+
+When temporary environment credentials are required:
 
 ```bash
 export AWS_ACCESS_KEY_ID="your-access-key-id"
 export AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+export AWS_SESSION_TOKEN="your-session-token"
 export AWS_REGION="us-east-1"
 ```
 
-If you use temporary credentials, also set:
+Never put secrets in variables beginning with `VITE_`; Vite exposes those variables
+to browser code. Never commit `.env` files or AWS credentials.
 
-```bash
-export AWS_SESSION_TOKEN="your-session-token"
-```
+## Application Architecture
 
-### Option B: `~/.aws/credentials`
-
-Create this file on your Mac:
-
-```ini
-[default]
-aws_access_key_id = your-access-key-id
-aws_secret_access_key = your-secret-access-key
-```
-
-Then create `~/.aws/config`:
-
-```ini
-[default]
-region = us-east-1
-```
-
-Your IAM user needs permission to call Rekognition. A starter policy is often `AmazonRekognitionFullAccess`.
-
-## 3. Put your images in a folder
-
-Example:
+The project is one application, not separately deployed frontend and backend services.
 
 ```text
-~/Desktop/celeb-images
+Browser
+   ↓
+Express server
+   ├── /api/*  → API routes and future AWS/database services
+   └── /*       → React application through Vite or the production build
 ```
 
-Supported formats:
+In development, Express mounts Vite as middleware. In production, Express serves the
+built React files from `dist/`.
 
-- `.jpg`
-- `.jpeg`
-- `.png`
-
-## 4. Run the script
-
-```bash
-python3 src/facerecognition_app/recognize_celebrities.py ~/Desktop/celeb-images
-```
-
-To also save all results to JSON:
-
-```bash
-python3 src/facerecognition_app/recognize_celebrities.py ~/Desktop/celeb-images --output results.json
-```
-
-## Output
-
-For each image, the script prints JSON with:
-
-- detected celebrity names
-- Rekognition celebrity IDs
-- match confidence
-- related URLs when available
-- count of unrecognized faces
-
-## Notes
-
-- This uses Amazon Rekognition's `RecognizeCelebrities` API for known public figures.
-- Rekognition does not identify non-celebrities by name with this API.
-- The image bytes are sent directly from your Mac to AWS; S3 is not required for this image workflow.
-
-## Download images from your spreadsheet
-
-Your spreadsheet can live anywhere on your Mac. For the file:
+## Project Structure
 
 ```text
-~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx
+celeb-face-match-and-search/
+├── src/                          # React application
+│   ├── app/                      # Providers, router, and application shell
+│   ├── pages/                    # Gallery and future feature pages
+│   └── styles/                   # Tailwind and global styles
+├── server/                       # Express API
+│   ├── config/                   # Environment validation
+│   ├── recognition/              # Recognition provider boundary
+│   └── routes/                   # API routes
+├── shared/                       # Browser/server contracts and schemas
+├── data/
+│   ├── uploads/                  # Ignored local uploads
+│   └── recognition-results/      # Ignored local AI responses
+├── tools/
+│   ├── facerecognition_app/      # Existing Python proof of concept
+│   └── requirements.txt          # Python-only dependencies
+├── index.html
+├── package.json
+├── tsconfig.json
+├── tsconfig.server.json
+└── vite.config.ts
 ```
 
-and an output folder like:
+## Gallery Asset
 
-```text
-~/Desktop/celeb-images/downloaded-images
-```
+The current prototype loads its sample image remotely from `assets.vogue.com`; the
+image is not stored in this repository. Keep photo credits visible and confirm content
+usage rights before introducing additional assets.
 
-run:
+## Offline Python Rekognition Tools
+
+The scripts under `tools/facerecognition_app/` are preserved as offline experimentation
+and benchmark utilities. The Express server does not execute them.
+
+### Python Setup
 
 ```bash
-.venv/bin/python src/facerecognition_app/download_images_from_xlsx.py \
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r tools/requirements.txt
+```
+
+The scripts support `.jpg`, `.jpeg`, and `.png` images. The spreadsheet downloader also
+accepts `.webp` image URLs.
+
+### Recognize Images in a Folder
+
+```bash
+python3 tools/facerecognition_app/recognize_celebrities.py \
+  ~/Desktop/celeb-images
+```
+
+Save simplified results to JSON:
+
+```bash
+python3 tools/facerecognition_app/recognize_celebrities.py \
+  ~/Desktop/celeb-images \
+  --output results.json
+```
+
+### Download Spreadsheet Images
+
+The first worksheet must contain an `image_url` column. The optional `title` column is
+used to generate readable filenames.
+
+```bash
+.venv/bin/python tools/facerecognition_app/download_images_from_xlsx.py \
   "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx"
 ```
 
-This reads the first sheet, uses the `image_url` column for URLs, uses the `title` column to build readable filenames, and saves everything into:
-
-```text
-~/Desktop/celeb-images/Gallery Images
-```
-
-To only process the first `10` data rows:
+Process only the first 10 rows:
 
 ```bash
-.venv/bin/python src/facerecognition_app/download_images_from_xlsx.py \
+.venv/bin/python tools/facerecognition_app/download_images_from_xlsx.py \
   "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx" \
   --limit 10
 ```
 
-After the download finishes, run celebrity recognition on the downloaded folder:
+### Capture Raw Rekognition Results Incrementally
+
+This command downloads new spreadsheet images, skips previously processed rows, and
+appends one raw Rekognition record per image to `recognition_results.jsonl`:
 
 ```bash
-.venv/bin/python src/facerecognition_app/recognize_celebrities.py \
-  "~/Desktop/celeb-images/Gallery Images"
-```
-
-## Incremental capture with saved raw Rekognition output
-
-If you want to call the Rekognition API only once per new spreadsheet row and reuse the saved output later, run:
-
-```bash
-PYTHONPATH=src .venv/bin/python src/facerecognition_app/capture_recognition_from_xlsx.py \
+PYTHONPATH=tools .venv/bin/python \
+  tools/facerecognition_app/capture_recognition_from_xlsx.py \
   "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx"
 ```
 
-To only capture the first `10` rows:
+Add `--limit 10` to restrict the run.
+
+### Curate Saved Results
+
+The curation script filters by Rekognition confidence and checks recognized names
+against image titles without calling AWS again:
 
 ```bash
-PYTHONPATH=src .venv/bin/python src/facerecognition_app/capture_recognition_from_xlsx.py \
-  "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx" \
-  --limit 10
-```
-
-This creates:
-
-- `Gallery Images`: downloaded image files
-- `processing_state.json`: compact index of rows already processed
-- `recognition_results.jsonl`: append-only raw Rekognition results, one JSON record per image
-
-`recognition_results.jsonl` is the best primary storage format here because each image can have multiple celebrities and the raw Rekognition payload is naturally nested JSON. You can then do downstream filtering and title-based validation without calling the API again.
-
-## Curate saved results without re-calling Rekognition
-
-To apply downstream rules offline:
-
-- keep only celebrities with `match_confidence >= 70`
-- keep only celebrities whose name appears to match the image `title`
-
-run:
-
-```bash
-.venv/bin/python src/facerecognition_app/curate_recognition_results.py \
+.venv/bin/python tools/facerecognition_app/curate_recognition_results.py \
   "~/Desktop/celeb-images/recognition_results.jsonl"
 ```
 
-This writes:
-
-```text
-~/Desktop/celeb-images/curated_recognition_results.json
-```
-
-You can override the confidence threshold:
+Override the default confidence threshold:
 
 ```bash
-.venv/bin/python src/facerecognition_app/curate_recognition_results.py \
+.venv/bin/python tools/facerecognition_app/curate_recognition_results.py \
   "~/Desktop/celeb-images/recognition_results.jsonl" \
   --min-confidence 75
 ```
 
-The curated output includes:
-
-- image metadata
-- processing time
-- verified celebrity matches
-- discarded celebrity matches
-- errors, if any
-
-## Search curated results
-
-To search the curated file by celebrity name and get matching image URLs back:
+### Search Curated Results
 
 ```bash
-.venv/bin/python src/facerecognition_app/search_curated_results.py \
-  ~/Desktop/celeb-images/curated_recognition_results.json \
-  "Rihanna"
-```
-
-This returns JSON with:
-
-- the query
-- number of matches
-- matching `image_url`
-- title
-- identification source
-- local image path
-
-To limit results:
-
-```bash
-.venv/bin/python src/facerecognition_app/search_curated_results.py \
-  ~/Desktop/celeb-images/curated_recognition_results.json \
+.venv/bin/python tools/facerecognition_app/search_curated_results.py \
+  "~/Desktop/celeb-images/curated_recognition_results.json" \
   "Rihanna" \
   --limit 5
 ```
+
+## Collaboration Workflow
+
+1. Sync your fork with the upstream `main` branch.
+2. Create a branch such as `feat/gallery-page` or `feat/aws-rekognition`.
+3. Make focused changes and run `npm run typecheck`, `npm test`, and `npm run build`.
+4. Push the feature branch to your fork.
+5. Open a pull request against the upstream `main` branch.
+
+Do not push directly to `main`.
+
+## Security and Repository Hygiene
+
+Do not commit:
+
+- `.env` files or AWS credentials
+- Local SQLite databases
+- Files under `data/uploads/`
+- Raw recognition-result files
+- Unapproved or unlicensed photographs
+- Python virtual environments
+- `node_modules/` or build output
+
+This repository is an internal hackathon prototype and does not currently include a
+license for external distribution.
