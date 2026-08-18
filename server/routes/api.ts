@@ -2,13 +2,16 @@ import express, { Router } from "express";
 
 import { apiNotFoundHandler } from "../middleware/api-not-found.js";
 import { apiErrorHandler } from "../middleware/error-handler.js";
+import { createAssetRouter, type AssetRouteService } from "./assets.js";
 
 export interface ApiRouterDependencies {
+  assetService: AssetRouteService;
   checkDatabaseReadiness: () => Promise<void>;
   recognitionProvider: "aws-rekognition";
 }
 
 export function createApiRouter({
+  assetService,
   checkDatabaseReadiness,
   recognitionProvider,
 }: ApiRouterDependencies): Router {
@@ -41,6 +44,8 @@ export function createApiRouter({
       });
     }
   });
+
+  apiRouter.use("/assets", createAssetRouter(assetService));
 
   apiRouter.use(apiNotFoundHandler);
   apiRouter.use(apiErrorHandler);

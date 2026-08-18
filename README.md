@@ -16,6 +16,8 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 - Shared, validated recognition-result contract
 - AWS Rekognition SDK and server-side provider configuration
 - MongoDB connection lifecycle, readiness check, and idempotent index initialization
+- Idempotent single and batch image ingestion with local file storage
+- Asset list, detail, and image-serving APIs for the Copilot mock
 - Preserved Python utilities for offline Rekognition experiments and benchmarking
 
 ## Current User Flow
@@ -27,8 +29,8 @@ Open application
     → Discover page placeholder
 ```
 
-The upload workflow, persisted asset models, AWS API endpoint, search results, and
-celebrity archive are planned next; they are not implemented yet.
+The backend upload workflow and persisted asset model are ready. The editor UI, AWS
+recognition worker, search results, and celebrity archive are planned next.
 
 ## Technology
 
@@ -41,6 +43,8 @@ celebrity archive are planned next; they are not implemented yet.
 - Node.js and Express
 - Zod
 - AWS SDK for Rekognition
+- MongoDB
+- Multer
 - Vitest
 
 ## Requirements
@@ -131,6 +135,47 @@ Stop the development server with `Ctrl+C`.
 | `/admin/photos/:assetId` | Placeholder | Photo and recognition details |
 | `/api/health` | Ready | API and provider health check |
 | `/api/ready` | Ready | MongoDB-backed application readiness check |
+| `GET /api/assets` | Ready | Paginated photo-library assets |
+| `POST /api/assets` | Ready | Single or batch image ingestion |
+| `GET /api/assets/:assetId` | Ready | Asset metadata and recognition state |
+| `GET /api/assets/:assetId/image` | Ready | Stored image bytes |
+
+## Asset Ingestion API
+
+Upload one to ten JPEG or PNG images using repeated `images` fields. Each image must
+be no larger than 5 MiB, matching
+[Amazon Rekognition's raw-byte input constraints](https://docs.aws.amazon.com/rekognition/latest/dg/limits.html),
+with neither edge above 10,000 pixels and no more than 50 megapixels. The `manifest` must
+contain one client-generated UUID per image in the same order:
+
+```bash
+curl -X POST http://localhost:3000/api/assets \
+  -F 'images=@/path/to/rihanna.jpg' \
+  -F 'manifest=[{"clientAssetId":"f167c99c-9ad0-4f3d-aad4-bf19cbe15a90"}]'
+```
+
+The response is immediate after the image and MongoDB record are saved. Recognition is
+initialized as `QUEUED`; Phase 3 will process it asynchronously. Reusing a client asset
+ID with the same bytes returns the original asset, while reusing it for different bytes
+returns `409`.
+
+Upload results preserve manifest order and include a `created` flag plus relative asset,
+image, and admin links. The endpoint returns `201` when at least one asset is created and
+`200` when the whole request is an idempotent replay. Idempotency is scoped to the client
+asset ID, so the same image bytes uploaded with different IDs create separate assets.
+
+Batches are persisted one asset at a time. If a later image fails, earlier successful
+assets remain; safely retry the full batch with the same client asset IDs. Under concurrent
+upload load, the endpoint can return `429`; clients should retry with a short backoff.
+
+List assets newest first with an optional cursor:
+
+```text
+GET /api/assets?limit=20&cursor=<asset-id>
+```
+
+`limit` defaults to `20` and accepts values from `1` through `100`. When `nextCursor` is
+not `null`, pass it as the next request's `cursor` to continue listing.
 
 ## Commands
 
@@ -213,6 +258,7 @@ Browser
 Express server
    ├── /api/*  → API routes and future AWS/database services
    ├── MongoDB  → metadata, recognition state and gallery usage
+   ├── data/uploads → ignored local image storage
    └── /*       → React application through Vite or the production build
 ```
 
@@ -233,7 +279,10 @@ celeb-face-match-and-search/
 │   ├── database/                 # MongoDB lifecycle and indexes
 │   ├── middleware/               # Consistent API errors
 │   ├── recognition/              # Recognition provider boundary
-│   └── routes/                   # API routes
+│   ├── repositories/             # Asset persistence boundary and Mongo implementation
+│   ├── routes/                   # API routes
+│   ├── services/                 # Asset ingestion orchestration
+│   └── storage/                  # Local image-storage boundary
 ├── shared/                       # Browser/server contracts and schemas
 ├── data/
 │   ├── uploads/                  # Ignored local uploads
