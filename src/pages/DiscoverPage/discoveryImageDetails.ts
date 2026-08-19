@@ -1,12 +1,25 @@
 import type {
-  ArchiveCelebrity,
-  ArchiveImage,
-} from "../../data/sampleArchive.js";
+  VersoCelebrity,
+  VersoSearchAsset,
+} from "../../../shared/search.js";
 
 export type FeaturedContentLink = {
   title: string;
   url: string;
 };
+
+// Temporary presentation fixtures until Featured In relationships are exposed
+// by the backend. Keep these separate from API-mapped fields.
+const featuredContentFixtures: readonly FeaturedContentLink[] = [
+  {
+    title: "Met Gala 2026: Red Carpet Celebrity Arrivals",
+    url: "https://www.vogue.com/slideshow/met-gala-2026-red-carpet-celebrity-arrivals-live",
+  },
+  {
+    title: "Met Gala 2025: The Red Carpet",
+    url: "https://www.vogue.com/slideshow/met-gala-2025-red-carpet",
+  },
+];
 
 export type DiscoveryImageDetails = {
   altText: string;
@@ -18,32 +31,29 @@ export type DiscoveryImageDetails = {
   featuredIn: readonly FeaturedContentLink[];
   id: string;
   imageUrl: string;
+  title: string | null;
   year: number | null;
 };
 
 export function toDiscoveryImageDetails(
-  image: ArchiveImage,
-  celebrity: ArchiveCelebrity,
+  asset: VersoSearchAsset,
+  celebrity: VersoCelebrity,
 ): DiscoveryImageDetails {
-  const usage = image.usages[0];
-  const event = usage?.event;
-
   return {
     altText:
-      image.source_text.alt_text ??
-      `${celebrity.canonical_name} photographed for the Vogue image archive`,
-    assetId: image.image_id,
-    backStory: image.source_text.backstory,
-    caption: image.source_text.caption,
-    celebrityName: celebrity.canonical_name,
-    eventName: event?.event_name ?? null,
-    featuredIn: image.featured_in,
-    id: [
-      image.image_id,
-      event?.event_id ?? "no-event",
-      event?.year ?? "no-year",
-    ].join(":"),
-    imageUrl: image.image_url,
-    year: event?.year ?? null,
+      asset.sourceText.altText ??
+      asset.sourceText.caption ??
+      asset.sourceText.title ??
+      `${celebrity.displayName} photographed for the Vogue image archive`,
+    assetId: asset.assetId,
+    backStory: asset.sourceText.backstory ?? null,
+    caption: asset.sourceText.caption,
+    celebrityName: celebrity.displayName,
+    eventName: asset.event?.name ?? null,
+    featuredIn: featuredContentFixtures,
+    id: `${asset.assetId}:${asset.sourceGallery.galleryId}`,
+    imageUrl: asset.links.image,
+    title: asset.sourceText.title,
+    year: asset.event?.year ?? null,
   };
 }

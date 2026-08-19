@@ -221,6 +221,7 @@ function createApprovedAssetLookup(
             "enrichment.associations": 1,
             "ingest.originalFilename": 1,
             "sourceText.altText": 1,
+            "sourceText.backstory": 1,
             "sourceText.caption": 1,
             "sourceText.title": 1,
             "storage.mimeType": 1,
@@ -262,7 +263,12 @@ function toSearchRepositoryItem(document: AggregatedGalleryUsage): VersoSearchRe
     galleryId: document.galleryId,
     mimeType: document.asset.storage.mimeType,
     originalFilename: document.asset.ingest.originalFilename,
-    sourceText: document.asset.sourceText,
+    sourceText: {
+      altText: document.asset.sourceText.altText,
+      backstory: document.asset.sourceText.backstory ?? null,
+      caption: document.asset.sourceText.caption,
+      title: document.asset.sourceText.title,
+    },
     year: document.year ?? null,
   };
 }

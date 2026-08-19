@@ -8,6 +8,9 @@ import {
   type CelebrityArchiveResponse,
   type CelebritySearchQuery,
   type CelebritySearchResponse,
+  type DiscoveryHubPerson,
+  type DiscoveryHubQuery,
+  type DiscoveryHubResponse,
   type VersoCelebrity,
   type VersoSearchAsset,
 } from "../../shared/search.js";
@@ -19,6 +22,7 @@ import {
 import type {
   CelebrityCatalogEntry,
   CelebrityLookupRepository,
+  CelebrityRepository,
 } from "../repositories/CelebrityRepository.js";
 import type {
   VersoSearchCursor,
@@ -28,7 +32,7 @@ import type {
 } from "../repositories/VersoSearchRepository.js";
 
 interface VersoSearchServiceDependencies {
-  celebrityRepository: CelebrityLookupRepository;
+  celebrityRepository: CelebrityLookupRepository & CelebrityRepository;
   searchRepository: VersoSearchRepository;
 }
 
@@ -45,7 +49,7 @@ const cursorPayloadSchema = z
   .strict();
 
 export class VersoSearchService {
-  readonly #celebrityRepository: CelebrityLookupRepository;
+  readonly #celebrityRepository: CelebrityLookupRepository & CelebrityRepository;
   readonly #searchRepository: VersoSearchRepository;
 
   constructor({ celebrityRepository, searchRepository }: VersoSearchServiceDependencies) {
@@ -75,6 +79,32 @@ export class VersoSearchService {
 
     const page = await this.#findCelebrityPage(matches[0], query);
     return { ...page, query: query.query };
+  }
+
+  async getDiscoveryHub(query: DiscoveryHubQuery): Promise<DiscoveryHubResponse> {
+    const celebrities = await this.#celebrityRepository.list();
+    const pages = await Promise.all(
+      celebrities.map((celebrity) => this.#findCelebrityPage(celebrity, { limit: 1 })),
+    );
+    const eligiblePeople = pages
+      .flatMap<DiscoveryHubPerson>((page) => {
+        const representativeImage = page.items[0];
+        if (!representativeImage || page.total_count === 0) {
+          return [];
+        }
+
+        return [{
+          celebrity: page.celebrity,
+          representativeImage,
+          total_count: page.total_count,
+        }];
+      })
+      .sort(compareDiscoveryPeople);
+
+    return {
+      people: eligiblePeople.slice(0, query.limit),
+      suggestedSearches: eligiblePeople.slice(0, 3).map(({ celebrity }) => celebrity),
+    };
   }
 
   async getCelebrityArchive(
@@ -126,6 +156,12 @@ export class VersoSearchService {
       total_count: totalCount,
     };
   }
+}
+
+function compareDiscoveryPeople(first: DiscoveryHubPerson, second: DiscoveryHubPerson): number {
+  return second.total_count - first.total_count
+    || first.celebrity.displayName.localeCompare(second.celebrity.displayName, "en-US")
+    || first.celebrity.slug.localeCompare(second.celebrity.slug, "en-US");
 }
 
 function toVersoCelebrity(celebrity: CelebrityCatalogEntry): VersoCelebrity {

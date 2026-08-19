@@ -316,6 +316,7 @@ describeWithMongo("MongoDB foundation", () => {
     } = {}) =>
       assets!.insert(
         createAsset({
+          backstory: "Rihanna arrived early for a quiet portrait before the red carpet.",
           enrichment: {
             associations: [
               {
@@ -403,6 +404,9 @@ describeWithMongo("MongoDB foundation", () => {
           event: "met-gala",
           eventName: "Met Gala",
           galleryId: "published-gallery",
+          sourceText: {
+            backstory: "Rihanna arrived early for a quiet portrait before the red carpet.",
+          },
           year: 2027,
         },
       ],
@@ -966,6 +970,7 @@ describeWithMongo("MongoDB foundation", () => {
 
 function createAsset(
   options: {
+    backstory?: string | null;
     clientAssetId?: string;
     createdAt?: Date;
     enrichment?: NewAssetRecord["enrichment"];
@@ -989,7 +994,7 @@ function createAsset(
     },
     sourceText: {
       altText: "A celebrity arriving at the gala",
-      backstory: null,
+      backstory: options.backstory ?? null,
       caption: "Arrival on the Met Gala carpet",
       revision: 1,
       title: "Met Gala arrival",
