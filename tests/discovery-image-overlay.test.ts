@@ -3,10 +3,31 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { sampleArchiveImages } from "../src/data/sampleArchive.js";
+import { DiscoveryImageCard } from "../src/pages/DiscoverPage/DiscoveryImageCard.js";
 import { DiscoveryImageDialog } from "../src/pages/DiscoverPage/DiscoveryImageDialog.js";
 import { toDiscoveryImageDetails } from "../src/pages/DiscoverPage/discoveryImageDetails.js";
 
 describe("discovery image overlay", () => {
+  it("shows the backstory indicator only when backstory content is available", () => {
+    const image = sampleArchiveImages[0];
+    const celebrity = image?.celebrities[0];
+    if (!image || !celebrity) throw new Error("Expected sample archive data.");
+
+    const details = toDiscoveryImageDetails(image, celebrity);
+    const renderCard = (backStory: string | null) =>
+      renderToStaticMarkup(
+        createElement(DiscoveryImageCard, {
+          children: null,
+          details: { ...details, backStory },
+          onOpen() {},
+        }),
+      );
+
+    expect(renderCard(details.backStory)).toContain("backstory available");
+    expect(renderCard(null)).not.toContain("backstory available");
+    expect(renderCard("   ")).not.toContain("backstory available");
+  });
+
   it("maps selected archive data without changing backend-provided values", () => {
     const image = sampleArchiveImages[0];
     const celebrity = image?.celebrities[0];
