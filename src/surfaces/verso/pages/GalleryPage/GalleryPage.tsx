@@ -9,15 +9,11 @@ const adSlotStyles = {
     size: "640 × 100",
   },
   leaderboard: {
-    className: "mx-auto min-h-24 w-full max-w-[60.625rem]",
-    size: "970 × 90",
-  },
-  "rail-rectangle": {
-    className: "min-h-[15.625rem] w-full max-w-[18.75rem]",
-    size: "300 × 250",
+    className: "mx-auto min-h-24 w-full max-w-[45.5rem]",
+    size: "728 × 90",
   },
   "rail-tall": {
-    className: "min-h-[37.5rem] w-full max-w-[18.75rem]",
+    className: "min-h-[37.5rem] w-full max-w-[20rem]",
     size: "300 × 600",
   },
 } as const;
@@ -59,11 +55,11 @@ function GallerySlide({ image, index, total }: GallerySlideProps) {
   const isFirstImage = index === 0;
 
   return (
-    <figure className="[content-visibility:auto] [contain-intrinsic-size:auto_54rem]">
-      <div className="mx-auto max-w-[34rem] bg-neutral-100">
+    <figure className="[content-visibility:auto] [contain-intrinsic-size:auto_46rem]">
+      <div className="mx-auto max-w-[28rem] bg-neutral-100">
         <img
           alt={image.alt}
-          className="block h-auto max-h-[50rem] w-full object-contain"
+          className="block h-auto max-h-[42rem] w-full object-contain"
           decoding="async"
           fetchPriority={isFirstImage ? "high" : "auto"}
           height="1440"
@@ -73,7 +69,7 @@ function GallerySlide({ image, index, total }: GallerySlideProps) {
         />
       </div>
 
-      <figcaption className="mx-auto grid max-w-[34rem] gap-2 border-b border-neutral-300 px-1 py-4 text-sm leading-6 sm:grid-cols-[auto_1fr]">
+      <figcaption className="mx-auto grid max-w-[28rem] gap-2 border-b border-neutral-300 px-1 py-3 text-xs leading-5 sm:grid-cols-[auto_1fr]">
         <span className="font-semibold tabular-nums">
           {index + 1} / {total}
         </span>
@@ -126,18 +122,18 @@ function NewsletterSignup() {
   return (
     <section
       aria-labelledby="newsletter-title"
-      className="px-5 py-16 text-center sm:px-8 sm:py-20"
+      className="px-5 py-12 text-center sm:px-8 sm:py-16"
     >
       <h2
-        className="mx-auto max-w-4xl text-balance text-4xl font-medium leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-[4rem]"
+        className="mx-auto max-w-3xl text-balance text-3xl font-medium leading-[1.08] tracking-[-0.03em] sm:text-4xl lg:text-[3rem]"
         id="newsletter-title"
       >
         Get the latest fashion stories, style, and tips, handpicked for you.
       </h2>
-      <p className="mt-7 text-lg">Vogue Daily Newsletter</p>
+      <p className="mt-5 text-base">Vogue Daily Newsletter</p>
 
       <form
-        className="mx-auto mt-10 flex max-w-5xl flex-col sm:flex-row"
+        className="mx-auto mt-7 flex max-w-4xl flex-col sm:flex-row"
         onSubmit={handleSubmit}
       >
         <label className="sr-only" htmlFor="newsletter-email">
@@ -145,7 +141,7 @@ function NewsletterSignup() {
         </label>
         <input
           autoComplete="email"
-          className="min-h-14 min-w-0 flex-1 border border-neutral-300 bg-white px-4 text-base outline-none focus-visible:border-neutral-950 focus-visible:ring-2 focus-visible:ring-neutral-950 disabled:bg-neutral-100"
+          className="min-h-12 min-w-0 flex-1 border border-neutral-300 bg-white px-4 text-sm outline-none focus-visible:border-neutral-950 focus-visible:ring-2 focus-visible:ring-neutral-950 disabled:bg-neutral-100"
           disabled={hasSubmitted}
           id="newsletter-email"
           name="email"
@@ -154,7 +150,7 @@ function NewsletterSignup() {
           type="email"
         />
         <button
-          className="min-h-14 bg-neutral-950 px-10 text-sm font-semibold uppercase tracking-[0.13em] text-white transition-colors hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-500"
+          className="min-h-12 bg-neutral-950 px-9 text-xs font-semibold uppercase tracking-[0.13em] text-white transition-colors hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-950 disabled:cursor-not-allowed disabled:bg-neutral-500"
           disabled={hasSubmitted}
           type="submit"
         >
@@ -171,10 +167,15 @@ function NewsletterSignup() {
   );
 }
 
+const gallerySections = [
+  gallery.images.slice(0, 5),
+  gallery.images.slice(5),
+] as const;
+
 export function GalleryPage() {
   return (
-    <article className="bg-white pb-12 text-neutral-950">
-      <header className="mx-auto max-w-[80rem] px-5 pb-10 pt-12 text-center sm:px-8 sm:pt-14 lg:pb-12 lg:pt-16">
+    <article className="bg-white pb-8 text-neutral-950">
+      <header className="mx-auto max-w-[64rem] px-5 pb-8 pt-8 text-center sm:px-8 sm:pb-10 sm:pt-10 lg:pt-12">
         <Link
           className="text-xs font-semibold uppercase tracking-[0.18em] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-950"
           to="/galleries/met-gala-2026"
@@ -182,15 +183,15 @@ export function GalleryPage() {
           {gallery.category}
         </Link>
 
-        <h1 className="font-editorial mx-auto mt-5 max-w-5xl text-balance text-4xl leading-[0.96] tracking-[-0.035em] sm:text-5xl lg:text-[4.75rem]">
+        <h1 className="font-editorial mx-auto mt-4 max-w-4xl text-balance text-3xl leading-[0.98] tracking-[-0.03em] sm:text-4xl lg:text-[3.5rem]">
           {gallery.title}
         </h1>
 
-        <p className="mx-auto mt-6 max-w-3xl text-pretty text-base leading-7 text-neutral-700 sm:text-lg">
+        <p className="mx-auto mt-5 max-w-2xl text-pretty text-sm leading-6 text-neutral-700 sm:text-base">
           {gallery.description}
         </p>
 
-        <div className="mt-6 text-sm leading-6">
+        <div className="mt-4 text-xs leading-5">
           <p>
             By <span className="font-semibold">{gallery.author.name}</span>
           </p>
@@ -200,10 +201,10 @@ export function GalleryPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-[40rem] px-5 pb-12 sm:px-8 sm:pb-16">
+      <div className="mx-auto max-w-[36rem] px-5 pb-10 sm:px-8 sm:pb-12">
         {gallery.introduction.map((paragraph) => (
           <p
-            className="mb-5 font-serif text-lg leading-[1.7] text-neutral-800 last:mb-0 sm:text-xl"
+            className="mb-4 font-serif text-base leading-[1.65] text-neutral-800 last:mb-0"
             key={paragraph}
           >
             {paragraph}
@@ -211,7 +212,7 @@ export function GalleryPage() {
         ))}
       </div>
 
-      <div className="px-5 pb-12 sm:px-8 sm:pb-16">
+      <div className="px-5 pb-10 sm:px-8 sm:pb-12">
         <AdSlot variant="leaderboard" />
       </div>
 
@@ -220,42 +221,61 @@ export function GalleryPage() {
           2026 Met Gala red carpet slideshow
         </h2>
 
-        <div className="mx-auto grid max-w-[76rem] items-start gap-14 px-5 sm:px-8 lg:grid-cols-[minmax(0,42rem)_18.75rem] lg:justify-center lg:gap-16">
-          <div className="space-y-14 sm:space-y-16">
-            {gallery.images.map((image, index) => (
-              <Fragment key={image.id}>
-                <GallerySlide image={image} index={index} total={gallery.images.length} />
-                {index === 4 ? <AdSlot variant="inline" /> : null}
-              </Fragment>
-            ))}
-          </div>
+        <div className="mx-auto max-w-[70rem] space-y-12 px-5 sm:space-y-14 sm:px-8">
+          {gallerySections.map((images, sectionIndex) => (
+            <Fragment key={`gallery-section-${sectionIndex + 1}`}>
+              <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,34rem)_20rem] lg:justify-center lg:gap-12">
+                <div className="space-y-10 sm:space-y-12">
+                  {images.map((image, imageIndex) => {
+                    const absoluteIndex = sectionIndex * 5 + imageIndex;
 
-          <aside
-            aria-hidden="true"
-            className="hidden content-start gap-[32rem] pt-8 lg:grid"
-          >
-            <AdSlot variant="rail-rectangle" />
-            <AdSlot variant="rail-tall" />
-          </aside>
+                    return (
+                      <GallerySlide
+                        image={image}
+                        index={absoluteIndex}
+                        key={image.id}
+                        total={gallery.images.length}
+                      />
+                    );
+                  })}
+                </div>
+
+                <aside
+                  aria-label={`Advertisement rail ${sectionIndex + 1}`}
+                  className="relative hidden h-full min-h-[52rem] lg:block"
+                >
+                  <div className="sticky top-24">
+                    <AdSlot variant="rail-tall" />
+                  </div>
+                </aside>
+              </div>
+
+              {sectionIndex === 0 ? (
+                <div className="mx-auto max-w-[45.5rem]">
+                  <AdSlot variant="inline" />
+                </div>
+              ) : null}
+            </Fragment>
+          ))}
         </div>
       </section>
 
       <section
         aria-labelledby="gallery-search-title"
-        className="mt-16 border-y border-neutral-950 bg-[#ece8df] sm:mt-20"
+        className="mt-12 border-y border-neutral-950 bg-[#ece8df] sm:mt-16"
       >
-        <div className="mx-auto grid max-w-[76rem] gap-7 px-5 py-10 sm:px-8 sm:py-12 lg:grid-cols-[1fr_auto] lg:items-center lg:gap-12">
-          <div className="min-w-0 max-w-3xl">
-            <p className="text-xs font-bold uppercase tracking-[0.18em]">
+        <div className="mx-auto grid max-w-[70rem] gap-6 px-5 py-8 sm:px-8 sm:py-10 lg:grid-cols-[1fr_auto] lg:items-center lg:gap-10">
+          <div className="min-w-0 max-w-2xl">
+            <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em]">
               AI-powered image discovery
             </p>
             <h2
-              className="font-editorial mt-3 text-balance text-3xl leading-none tracking-[-0.025em] sm:text-4xl"
+              className="font-editorial mt-2 text-balance text-2xl leading-none tracking-[-0.025em] sm:text-3xl"
               id="gallery-search-title"
             >
               Keep exploring beyond this gallery
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-700 sm:text-base">
+            <p className="mt-3 max-w-xl text-sm leading-6 text-neutral-700">
               Find every photograph of a celebrity across the wider image archive.
             </p>
           </div>
@@ -272,14 +292,14 @@ export function GalleryPage() {
         </div>
       </section>
 
-      <footer className="mx-auto max-w-[74rem] px-5 pt-14 sm:px-8 sm:pt-16">
+      <footer className="mx-auto max-w-[64rem] px-5 pt-10 sm:px-8 sm:pt-12">
         <section
           aria-labelledby="author-title"
-          className="grid gap-7 border-y border-neutral-300 py-10 sm:grid-cols-[10rem_1fr] sm:items-start"
+          className="grid gap-5 border-y border-neutral-300 py-8 sm:grid-cols-[7rem_1fr] sm:items-start"
         >
           <img
             alt={gallery.author.image.alt}
-            className="aspect-square size-40 object-cover"
+            className="aspect-square size-28 object-cover"
             decoding="async"
             height="350"
             loading="lazy"
@@ -290,7 +310,7 @@ export function GalleryPage() {
             <h2 className="sr-only" id="author-title">
               About the author
             </h2>
-            <p className="max-w-4xl text-lg leading-8 sm:text-xl sm:leading-9">
+            <p className="max-w-3xl text-base leading-7">
               <a
                 className="font-medium underline underline-offset-4 hover:text-neutral-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-950"
                 href={gallery.author.profileUrl}
@@ -307,7 +327,7 @@ export function GalleryPage() {
 
         <section
           aria-labelledby="topics-title"
-          className="flex flex-wrap items-center gap-x-12 gap-y-4 border-b border-neutral-300 py-8 text-lg"
+          className="flex flex-wrap items-center gap-x-8 gap-y-3 border-b border-neutral-300 py-6 text-base"
         >
           <h2 className="font-normal" id="topics-title">
             Topics
