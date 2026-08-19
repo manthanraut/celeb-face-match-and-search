@@ -144,7 +144,7 @@ export function PhotoDetailsForm({
           value={caption}
         />
         <p className="mt-1 text-xs leading-5 text-neutral-600" id="global-caption-guidance">
-          Celebrity names in the title or global caption confirm AWS matches below the 99% automatic-approval threshold.
+          Celebrity names in the title or global caption confirm AWS matches below the server-configured automatic-approval threshold.
           If AWS returns no match, use the format “Celebrity in Designer” to create a metadata-only association.
         </p>
       </div>

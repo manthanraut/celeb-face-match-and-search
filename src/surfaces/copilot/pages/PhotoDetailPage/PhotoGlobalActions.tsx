@@ -15,7 +15,7 @@ export function PhotoGlobalActions({
 }: PhotoGlobalActionsProps) {
   const saveMessage = errorMessage
     ?? (isSaved && !hasUnsavedChanges
-      ? "Photo saved. Celebrity decisions were updated using the stored AWS result."
+      ? "Photo saved. Celebrity decisions were recalculated from stored recognition and metadata."
       : "");
 
   return (

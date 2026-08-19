@@ -19,6 +19,13 @@ const CATALOG: CelebrityCatalogEntry[] = [
     slug: "rihanna",
   },
   {
+    displayName: "Doja Cat",
+    normalizedAliases: [],
+    normalizedName: "doja cat",
+    providerIdentities: [],
+    slug: "doja-cat",
+  },
+  {
     displayName: "Zendaya",
     normalizedAliases: ["zendaya maree stoermer coleman"],
     normalizedName: "zendaya",
@@ -155,6 +162,39 @@ describe("celebrity decision engine v1", () => {
         displayName: "Rihanna",
         evidenceFields: ["caption"],
         identityKey: "rihanna",
+        providerPersonId: null,
+        source: "metadata-inference",
+      },
+    ]);
+    expect(result.searchReady).toBe(true);
+  });
+
+  it("adds a metadata-only identity when recognition returns unrelated candidates", () => {
+    const result = evaluate(
+      recognitionResult([
+        face("Michael Rupert", 77.7, "aws-michael-rupert"),
+        face("DeMarcus Ware", 81, "aws-demarcus-ware"),
+      ]),
+      { title: "Doja Cat in Saint Laurent" },
+    );
+
+    expect(result.associations).toEqual([
+      expect.objectContaining({
+        decision: "NEEDS_REVIEW",
+        displayName: "Michael Rupert",
+        source: "recognition",
+      }),
+      expect.objectContaining({
+        decision: "NEEDS_REVIEW",
+        displayName: "DeMarcus Ware",
+        source: "recognition",
+      }),
+      {
+        confidence: null,
+        decision: "APPROVED",
+        displayName: "Doja Cat",
+        evidenceFields: ["title"],
+        identityKey: "doja-cat",
         providerPersonId: null,
         source: "metadata-inference",
       },

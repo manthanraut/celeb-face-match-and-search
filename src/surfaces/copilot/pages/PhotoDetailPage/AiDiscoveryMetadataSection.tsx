@@ -11,6 +11,10 @@ const confidenceFormatter = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 1,
 });
 
+export function formatMatchConfidence(confidence: number | null) {
+  return confidence === null ? "N/A" : `${confidenceFormatter.format(confidence)}%`;
+}
+
 function formatAnalyzedAt(value: string | null) {
   if (!value) return "Not completed";
 
@@ -245,9 +249,7 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
                         </span>
                       </td>
                       <td className="px-3 py-2.5 font-bold tabular-nums">
-                        {match.confidence === null
-                          ? "Metadata only"
-                          : `${confidenceFormatter.format(match.confidence)}%`}
+                        {formatMatchConfidence(match.confidence)}
                       </td>
                       <td className="px-3 py-2.5">
                         <StatusBadge tone={match.source === "metadata-inference" ? "purple" : "neutral"}>
