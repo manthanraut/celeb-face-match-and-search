@@ -80,7 +80,7 @@ AWS_REGION=us-east-1
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DATABASE=celeb_face_match
 UPLOAD_DIR=data/uploads
-RECOGNITION_APPROVAL_THRESHOLD=90
+RECOGNITION_APPROVAL_THRESHOLD=99
 ```
 
 Start MongoDB before starting the application.
@@ -168,7 +168,7 @@ The server loads `.env` through `dotenv` and validates server-owned variables wi
 | `MONGODB_URI` | No | URI beginning with `mongodb://` or `mongodb+srv://` | `mongodb://127.0.0.1:27017` | MongoDB connection URI. The server does not begin listening if it cannot connect and ping MongoDB. |
 | `MONGODB_DATABASE` | No | 1–63 letters, numbers, underscores, or hyphens | `celeb_face_match` | Database containing assets, celebrities, and gallery usages. |
 | `UPLOAD_DIR` | No | Non-empty path string | `data/uploads` | Local image directory. Relative paths resolve from `process.cwd()`. The directory is created automatically. |
-| `RECOGNITION_APPROVAL_THRESHOLD` | No | Number from `0` through `100` | `90` | Minimum recognition confidence that automatically produces an `APPROVED` association. Decimals are accepted. An empty value uses the default. |
+| `RECOGNITION_APPROVAL_THRESHOLD` | No | Number from `0` through `100` | `99` | Minimum recognition confidence that automatically produces an `APPROVED` association. Decimals are accepted. An empty value uses the default. |
 
 ### AWS credential variables
 
@@ -396,7 +396,6 @@ The following schemas are reused by multiple endpoints.
 | `sourceText.backstory` | string or `null`, max 5,000 | Editorial context or story behind the image. It is not celebrity identity evidence. |
 | `sourceText.revision` | positive integer | Incremented on every successful metadata update. |
 | `recognitionStatus` | recognition status | Current asynchronous recognition state. |
-| `searchReady` | boolean | `true` when current enrichment has at least one approved celebrity. Gallery publication is checked separately. |
 | `createdAt` | ISO date/time | Asset creation time. |
 | `updatedAt` | ISO date/time | Most recent stored asset change. |
 | `links.self` | string | Relative asset detail URL. |
@@ -472,9 +471,9 @@ interface RecognizedFace {
 | `associations` | celebrity association array | Approved and review-only candidates. |
 | `decisionEngineVersion` | positive integer or `null` | Current implementation writes version `2`. |
 | `evaluatedAt` | ISO date/time or `null` | Last decision evaluation time. |
+| `hideFromSearch` | boolean | Editorial search override corresponding to `enrichment_state.hide_from_search` in the project schema. New and legacy assets default to `false`. When `true`, the asset is excluded from public search even if it otherwise qualifies. |
 | `recognitionRevision` | positive integer or `null` | Recognition revision used by the decision. |
 | `sourceTextRevision` | positive integer or `null` | Metadata revision used by the decision. |
-| `searchReady` | boolean | Same value as top-level `searchReady`. |
 
 Celebrity association:
 
@@ -486,7 +485,10 @@ Celebrity association:
 | `evidenceFields` | string array | Zero or more of `title`, `caption`. |
 | `identityKey` | non-empty string | Canonical catalog slug or normalized generated key. |
 | `providerPersonId` | string or `null` | Provider identity when available. |
+| `searchDecision` | string | Celebrity-level search decision: `APPROVED` or `NEEDS_REVIEW`. Public search includes only an association whose value is `APPROVED`. |
 | `source` | string | `recognition` or `metadata-inference`. |
+
+Legacy MongoDB associations that predate `searchDecision` are interpreted using their equivalent `decision` value. API responses normalize those records and always include `searchDecision`.
 
 ### `SearchAsset`
 
@@ -723,7 +725,6 @@ Example — `201 Created`:
         "revision": 1
       },
       "recognitionStatus": "QUEUED",
-      "searchReady": false,
       "createdAt": "2027-05-04T12:00:00.000Z",
       "updatedAt": "2027-05-04T12:00:00.000Z",
       "links": {
@@ -844,7 +845,6 @@ Success response — `200 OK`:
         "revision": 2
       },
       "recognitionStatus": "SUCCEEDED",
-      "searchReady": true,
       "createdAt": "2027-05-04T12:00:00.000Z",
       "updatedAt": "2027-05-04T12:01:00.000Z",
       "links": {
@@ -907,7 +907,6 @@ Success response — `200 OK`: `AssetDetail`
     "revision": 2
   },
   "recognitionStatus": "SUCCEEDED",
-  "searchReady": true,
   "createdAt": "2027-05-04T12:00:00.000Z",
   "updatedAt": "2027-05-04T12:01:00.000Z",
   "links": {
@@ -927,13 +926,14 @@ Success response — `200 OK`: `AssetDetail`
         ],
         "identityKey": "rihanna",
         "providerPersonId": "fake-rihanna",
+        "searchDecision": "APPROVED",
         "source": "recognition"
       }
     ],
-    "decisionEngineVersion": 1,
+    "decisionEngineVersion": 2,
     "evaluatedAt": "2027-05-04T12:01:00.000Z",
+    "hideFromSearch": false,
     "recognitionRevision": 2,
-    "searchReady": true,
     "sourceTextRevision": 2
   },
   "recognition": {
@@ -1111,7 +1111,6 @@ Requeueing:
 - Resets the attempt count to zero.
 - Assigns the server's currently configured recognition provider.
 - Clears the previous result, error, lease, timestamps, and enrichment decisions.
-- Sets `searchReady` to `false`.
 - Does not process recognition synchronously.
 
 Errors:
@@ -1136,7 +1135,7 @@ Example conflict:
 
 ### Update asset metadata
 
-Saves editorial metadata and recalculates celebrity decisions from the stored recognition result. It does not call the recognition provider again.
+Saves editorial metadata and the search-visibility override, then recalculates celebrity decisions from the stored recognition result. It does not call the recognition provider again.
 
 | Property | Value |
 | --- | --- |
@@ -1160,10 +1159,12 @@ Request body:
 | `caption` | string or `null` | At least one metadata field is required | Maximum 5,000 characters. |
 | `altText` | string or `null` | At least one metadata field is required | Maximum 2,000 characters. |
 | `backstory` | string or `null` | At least one metadata field is required | Maximum 5,000 characters. |
+| `hideFromSearch` | boolean | At least one metadata field is required | `true` excludes the asset from public search; `false` allows it to appear when all other search requirements are met. Defaults to `false` for new assets. |
 
 The body is strict: unknown fields return a validation error.
 
 - Omitted fields retain their current values.
+- Omitting `hideFromSearch` retains the current visibility setting.
 - `null` clears a field.
 - Strings are trimmed.
 - Empty/whitespace-only strings are stored as `null`.
@@ -1181,7 +1182,8 @@ curl -X PATCH \
     "title": "Rihanna in Marc Jacobs",
     "caption": "Rihanna arrives at the Met Gala.",
     "altText": "Rihanna on the red carpet.",
-    "backstory": "Photographed shortly before the Met Gala arrival."
+    "backstory": "Photographed shortly before the Met Gala arrival.",
+    "hideFromSearch": false
   }'
 ```
 
@@ -1201,7 +1203,6 @@ Success response — `200 OK`: the complete updated `AssetDetail`.
     "revision": 2
   },
   "recognitionStatus": "SUCCEEDED",
-  "searchReady": true,
   "createdAt": "2027-05-04T12:00:00.000Z",
   "updatedAt": "2027-05-04T12:01:00.000Z",
   "links": {
@@ -1221,13 +1222,14 @@ Success response — `200 OK`: the complete updated `AssetDetail`.
         ],
         "identityKey": "rihanna",
         "providerPersonId": "aws-celebrity-id",
+        "searchDecision": "APPROVED",
         "source": "recognition"
       }
     ],
-    "decisionEngineVersion": 1,
+    "decisionEngineVersion": 2,
     "evaluatedAt": "2027-05-04T12:01:00.000Z",
+    "hideFromSearch": false,
     "recognitionRevision": 2,
-    "searchReady": true,
     "sourceTextRevision": 2
   },
   "recognition": {
@@ -1491,8 +1493,8 @@ Only records satisfying all of the following are returned:
 
 - The gallery usage is published.
 - The asset recognition status is `SUCCEEDED`.
-- `enrichment.searchReady` is `true`.
-- The requested celebrity has an `APPROVED` association.
+- `enrichment.hideFromSearch` is not `true` (missing legacy values are treated as `false`).
+- The requested celebrity association has `searchDecision` set to `APPROVED`.
 - The decision-engine version is the server's current version (`2`).
 - The stored recognition and source-text revisions used by enrichment still match the asset.
 - Optional event and year filters match the gallery usage.
@@ -1790,7 +1792,7 @@ These are recognition-state errors stored on the asset, not direct HTTP errors f
 
 ### Decision engine version 2
 
-The threshold defaults to 90 and is configurable through `RECOGNITION_APPROVAL_THRESHOLD`.
+The threshold defaults to 99 and is configurable through `RECOGNITION_APPROVAL_THRESHOLD`.
 
 | Scenario | Persisted result |
 | --- | --- |
@@ -1808,7 +1810,8 @@ Additional behavior:
 - Repeated matches for one identity are merged.
 - The highest confidence is retained.
 - Any approved duplicate makes the merged association approved.
-- `searchReady` is true when at least one association is approved.
+- Every celebrity association owns its `searchDecision`; there is no image-level search decision.
+- `hideFromSearch` is an independent image-level editorial override. When true, public retrieval excludes the asset without changing any celebrity decisions.
 - `NEEDS_REVIEW` records are persisted but excluded from public retrieval.
 - Metadata updates recalculate decisions without another provider call.
 - Revision-bound writes prevent stale recognition or metadata decisions from becoming searchable.
@@ -1958,8 +1961,8 @@ Check all of the following:
 1. The celebrity exists in `celebrities`.
 2. The query exactly matches `normalizedName` or one value in `normalizedAliases` after normalization.
 3. Recognition is `SUCCEEDED`.
-4. The relevant association is `APPROVED`.
-5. `searchReady` is true.
+4. The relevant association has `searchDecision: APPROVED`.
+5. `hideFromSearch` is false.
 6. Metadata and recognition revisions match the enrichment revisions.
 7. The gallery snapshot includes the asset.
 8. The gallery snapshot has `published: true`.

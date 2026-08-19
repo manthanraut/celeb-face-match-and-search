@@ -12,7 +12,7 @@ function createAsset(overrides: Partial<AssetRecord> = {}): AssetRecord {
   return {
     id: ASSET_ID,
     createdAt: NOW,
-    enrichment: { associations: [], searchReady: false },
+    enrichment: { associations: [], hideFromSearch: false },
     ingest: {
       clientAssetId: "11111111-1111-4111-8111-111111111111",
       originalFilename: "arrival.jpg",
@@ -98,7 +98,7 @@ function createHarness(initialAsset: AssetRecord | null = createAsset()) {
     ),
   };
   const service = new EnrichmentService({
-    approvalThreshold: 90,
+    approvalThreshold: 99,
     assetRepository,
     celebrityRepository,
     clock: () => NOW,
@@ -121,12 +121,13 @@ describe("EnrichmentService", () => {
           expect.objectContaining({
             decision: "NEEDS_REVIEW",
             displayName: "Rihanna",
+            searchDecision: "NEEDS_REVIEW",
           }),
         ],
         decisionEngineVersion: 2,
         evaluatedAt: NOW,
+        hideFromSearch: false,
         recognitionRevision: 2,
-        searchReady: false,
         sourceTextRevision: 1,
       },
       expectedRecognitionRevision: 2,
@@ -156,10 +157,10 @@ describe("EnrichmentService", () => {
         expect.objectContaining({
           decision: "APPROVED",
           evidenceFields: ["title"],
+          searchDecision: "APPROVED",
         }),
       ],
       recognitionRevision: 2,
-      searchReady: true,
       sourceTextRevision: 2,
     });
     expect(enrichmentRepository.saveMetadataAndEnrichment).toHaveBeenCalledWith(
@@ -169,6 +170,20 @@ describe("EnrichmentService", () => {
         expectedSourceTextRevision: 1,
       }),
     );
+  });
+
+  it("persists the search visibility override while preserving recognition decisions", async () => {
+    const { service } = createHarness();
+
+    const updated = await service.updateMetadata(ASSET_ID, { hideFromSearch: true });
+
+    expect(updated.enrichment).toMatchObject({
+      associations: [expect.objectContaining({
+        decision: "NEEDS_REVIEW",
+        searchDecision: "NEEDS_REVIEW",
+      })],
+      hideFromSearch: true,
+    });
   });
 
   it("normalizes backstory updates without using them as celebrity evidence", async () => {
@@ -184,8 +199,8 @@ describe("EnrichmentService", () => {
     expect(updated.enrichment.associations[0]).toMatchObject({
       decision: "NEEDS_REVIEW",
       evidenceFields: [],
+      searchDecision: "NEEDS_REVIEW",
     });
-    expect(updated.enrichment.searchReady).toBe(false);
   });
 
   it("clears a whitespace-only backstory while preserving omitted metadata", async () => {
@@ -224,7 +239,7 @@ describe("EnrichmentService", () => {
       caption: "Rihanna in Marc Jacobs",
     });
 
-    expect(updated.enrichment).toMatchObject({ associations: [], searchReady: false });
+    expect(updated.enrichment).toMatchObject({ associations: [] });
     expect(celebrityRepository.list).not.toHaveBeenCalled();
   });
 

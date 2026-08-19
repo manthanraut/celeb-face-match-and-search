@@ -30,13 +30,15 @@ function LinkIcon() {
 export function PhotoDetailPage() {
   const { assetId = "" } = useParams();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [hideFromSearchDraft, setHideFromSearchDraft] = useState<boolean | null>(null);
   const assetQuery = usePhotoAsset(assetId);
   const dimensionsQuery = usePhotoImageDimensions(assetQuery.data?.links.image);
   const metadataMutation = useUpdatePhotoMetadata(assetId);
 
   useEffect(() => {
     setHasUnsavedChanges(false);
-  }, [assetId]);
+    setHideFromSearchDraft(null);
+  }, [assetId, assetQuery.data?.sourceText.revision]);
 
   if (assetQuery.isPending || (assetQuery.data && dimensionsQuery.isPending)) {
     return (
@@ -72,6 +74,7 @@ export function PhotoDetailPage() {
   }
 
   const asset = assetQuery.data;
+  const hideFromSearch = hideFromSearchDraft ?? asset.enrichment.hideFromSearch;
   const photo = createPhotoEditData(asset, dimensionsQuery.data);
 
   return (
@@ -101,14 +104,25 @@ export function PhotoDetailPage() {
               isSaved={metadataMutation.isSuccess}
               key={`${asset.assetId}-${asset.sourceText.revision}`}
               onDirtyChange={setHasUnsavedChanges}
-              onSave={(sourceText) => metadataMutation.mutate(sourceText)}
+              onSave={(sourceText) => metadataMutation.mutate({
+                ...sourceText,
+                hideFromSearch,
+              })}
               photo={photo}
               sourceText={asset.sourceText}
             />
           </div>
         </section>
 
-        <AiDiscoveryMetadataSection asset={asset} />
+        <AiDiscoveryMetadataSection
+          asset={asset}
+          hideFromSearch={hideFromSearch}
+          isSaving={metadataMutation.isPending}
+          onHideFromSearchChange={(checked) => {
+            setHideFromSearchDraft(checked);
+            setHasUnsavedChanges(true);
+          }}
+        />
 
         <div className="scroll-mt-24" id="used-in">
           <PhotoWorkflowSections photo={photo} />

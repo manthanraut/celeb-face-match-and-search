@@ -466,7 +466,7 @@ function createRecord(
     },
     enrichment: {
       associations: [],
-      searchReady: false,
+      hideFromSearch: false,
     },
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -487,7 +487,6 @@ function toAsset(record: AssetRecord): Asset {
       revision: record.sourceText.revision,
     },
     recognitionStatus: record.recognition.status,
-    searchReady: record.enrichment.searchReady,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     links: {
@@ -505,8 +504,8 @@ function toAssetDetail(record: AssetRecord): AssetDetail {
       associations: record.enrichment.associations,
       decisionEngineVersion: record.enrichment.decisionEngineVersion ?? null,
       evaluatedAt: record.enrichment.evaluatedAt?.toISOString() ?? null,
+      hideFromSearch: record.enrichment.hideFromSearch,
       recognitionRevision: record.enrichment.recognitionRevision ?? null,
-      searchReady: record.enrichment.searchReady,
       sourceTextRevision: record.enrichment.sourceTextRevision ?? null,
     },
     recognition: {

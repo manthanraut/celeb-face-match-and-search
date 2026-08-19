@@ -123,12 +123,18 @@ export class MongoGalleryUsageRepository implements GalleryUsageRepository, Vers
                 $match: {
                   "enrichment.associations": {
                     $elemMatch: {
-                      decision: "APPROVED",
                       identityKey: celebritySlug,
+                      $or: [
+                        { searchDecision: "APPROVED" },
+                        {
+                          decision: "APPROVED",
+                          searchDecision: { $exists: false },
+                        },
+                      ],
                     },
                   },
                   "enrichment.decisionEngineVersion": decisionEngineVersion,
-                  "enrichment.searchReady": true,
+                  "enrichment.hideFromSearch": { $ne: true },
                   "recognition.status": "SUCCEEDED",
                   $expr: {
                     $and: [
@@ -187,7 +193,10 @@ function toSearchRepositoryItem(document: AggregatedGalleryUsage): VersoSearchRe
   return {
     addedAt: document.addedAt,
     assetId: document.assetId,
-    associations: document.asset.enrichment.associations,
+    associations: document.asset.enrichment.associations.map((association) => ({
+      ...association,
+      searchDecision: association.searchDecision ?? association.decision,
+    })),
     event: document.event ?? null,
     eventName: document.eventName ?? null,
     galleryId: document.galleryId,

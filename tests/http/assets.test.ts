@@ -32,7 +32,6 @@ function createAsset(overrides: Partial<Asset> = {}): Asset {
       title: "rihanna at the met gala",
     },
     recognitionStatus: "QUEUED",
-    searchReady: false,
     createdAt: "2027-05-04T12:00:00.000Z",
     updatedAt: "2027-05-04T12:00:00.000Z",
     links: {
@@ -51,8 +50,8 @@ function createAssetDetail(overrides: Partial<AssetDetail> = {}): AssetDetail {
       associations: [],
       decisionEngineVersion: null,
       evaluatedAt: null,
+      hideFromSearch: false,
       recognitionRevision: null,
-      searchReady: false,
       sourceTextRevision: null,
     },
     recognition: overrides.recognition ?? {
@@ -564,16 +563,16 @@ describe("asset API", () => {
             evidenceFields: ["title"],
             identityKey: "rihanna",
             providerPersonId: "aws-rihanna",
+            searchDecision: "APPROVED",
             source: "recognition",
           },
         ],
         decisionEngineVersion: 1,
         evaluatedAt: "2027-05-04T12:01:00.000Z",
+        hideFromSearch: true,
         recognitionRevision: 2,
-        searchReady: true,
         sourceTextRevision: 2,
       },
-      searchReady: true,
       sourceText: {
         altText: null,
         backstory: "Photographed shortly before the Met Gala arrival.",
@@ -591,6 +590,7 @@ describe("asset API", () => {
       const response = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/metadata`, {
         body: JSON.stringify({
           backstory: "Photographed shortly before the Met Gala arrival.",
+          hideFromSearch: true,
           title: "Rihanna in Marc Jacobs",
         }),
         headers: { "Content-Type": "application/json" },
@@ -601,6 +601,7 @@ describe("asset API", () => {
       await expect(response.json()).resolves.toEqual(updatedDetail);
       expect(assetService.updateMetadata).toHaveBeenCalledWith(ASSET_ID, {
         backstory: "Photographed shortly before the Met Gala arrival.",
+        hideFromSearch: true,
         title: "Rihanna in Marc Jacobs",
       });
     } finally {

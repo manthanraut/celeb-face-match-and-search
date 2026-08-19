@@ -2,6 +2,9 @@ import type { AssetDetail } from "../../../../features/assets/contracts";
 
 interface AiDiscoveryMetadataSectionProps {
   asset: AssetDetail;
+  hideFromSearch: boolean;
+  isSaving: boolean;
+  onHideFromSearchChange: (checked: boolean) => void;
 }
 
 type Association = AssetDetail["enrichment"]["associations"][number];
@@ -126,7 +129,12 @@ function RecognitionLoadingSkeleton() {
   );
 }
 
-export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSectionProps) {
+export function AiDiscoveryMetadataSection({
+  asset,
+  hideFromSearch,
+  isSaving,
+  onHideFromSearchChange,
+}: AiDiscoveryMetadataSectionProps) {
   const isRecognitionActive = asset.recognition.status === "QUEUED"
     || asset.recognition.status === "PROCESSING";
   const isEnrichmentPending = asset.recognition.status === "SUCCEEDED" && (
@@ -137,6 +145,9 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
   const isFailure = asset.recognition.status === "FAILED"
     || asset.recognition.status === "INDETERMINATE";
   const associations = asset.enrichment.associations;
+  const hasApprovedSearchDecision = associations.some(
+    ({ searchDecision }) => searchDecision === "APPROVED",
+  );
 
   return (
     <section
@@ -144,7 +155,7 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
       className="mt-6 rounded-md border border-neutral-200 bg-white p-5 shadow-[0_2px_5px_rgb(0_0_0/0.16)]"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-balance text-xl font-bold" id="ai-discovery-title">
               AI &amp; Discovery Metadata
@@ -159,6 +170,18 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
             System-generated metadata used by celebrity and designer image search.
           </p>
         </div>
+        <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-3 text-sm font-bold">
+          <span>Hide from search</span>
+          <input
+            checked={hideFromSearch}
+            className="peer sr-only"
+            disabled={isSaving}
+            onChange={(event) => onHideFromSearchChange(event.target.checked)}
+            role="switch"
+            type="checkbox"
+          />
+          <span className="relative h-7 w-12 rounded-full bg-neutral-400 transition-colors after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[#2948b8] peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#2948b8] peer-disabled:cursor-not-allowed peer-disabled:opacity-60 motion-reduce:transition-none motion-reduce:after:transition-none" />
+        </label>
       </div>
 
       {isFailure ? (
@@ -209,8 +232,12 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
             </h3>
             <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
               <span>One row per celebrity association</span>
-              <StatusBadge tone={asset.enrichment.searchReady ? "green" : "amber"}>
-                {asset.enrichment.searchReady ? "Search Ready" : "Not Search Ready"}
+              <StatusBadge tone={hasApprovedSearchDecision && !hideFromSearch ? "green" : "amber"}>
+                {hideFromSearch
+                  ? "Hidden from Search"
+                  : hasApprovedSearchDecision
+                    ? "Search Ready"
+                    : "Not Search Ready"}
               </StatusBadge>
             </div>
           </div>
@@ -236,6 +263,7 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
                   </tr>
                 ) : associations.map((match) => {
                   const isApproved = match.decision === "APPROVED";
+                  const isSearchApproved = match.searchDecision === "APPROVED";
                   const hasEditorialEvidence = match.evidenceFields.length > 0;
 
                   return (
@@ -267,8 +295,12 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
                         </StatusBadge>
                       </td>
                       <td className="px-3 py-2.5">
-                        <StatusBadge tone={isApproved ? "green" : "amber"}>
-                          {isApproved ? "Accepted" : "Needs Review"}
+                        <StatusBadge tone={isSearchApproved && !hideFromSearch ? "green" : "amber"}>
+                          {hideFromSearch
+                            ? "Hidden"
+                            : isSearchApproved
+                              ? "Approved"
+                              : "Needs Review"}
                         </StatusBadge>
                       </td>
                     </tr>

@@ -256,7 +256,7 @@ state return `409` because only a terminal failure can be retried manually.
 ## Metadata Enrichment and Decisions
 
 Decision engine version 2 uses the configured `RECOGNITION_APPROVAL_THRESHOLD`, which defaults
-to `90`. Each recognized celebrity produces one of two persisted decisions:
+to `99`. Each recognized celebrity produces one of two persisted decisions:
 
 | Scenario | Decision |
 | --- | --- |
@@ -266,16 +266,20 @@ to `90`. Each recognized celebrity produces one of two persisted decisions:
 | Recognition misses the celebrity named by catalog-backed `X in Y`, including when unrelated candidates are returned | `APPROVED` metadata inference |
 | Recognition misses the celebrity and `X` is not in the catalog | No association |
 
-Alt text and backstory are stored but are not identity evidence. Review candidates remain persisted, while
-`searchReady` becomes `true` only when at least one association is approved. Multiple faces are
-evaluated independently and repeated matches for the same celebrity are consolidated.
+Alt text and backstory are stored but are not identity evidence. Each celebrity association stores
+its own `searchDecision` as `APPROVED` or `NEEDS_REVIEW`; there is no image-level search decision.
+Multiple faces are evaluated independently and repeated matches for the same celebrity are consolidated.
+
+The Copilot photo page also exposes a **Hide from search** switch. It is off by default and is
+saved through the same metadata endpoint as `hideFromSearch`. A hidden asset keeps its recognition
+decisions but is excluded from Verso search until the switch is turned off and saved.
 
 Save one or more editorial fields with:
 
 ```bash
 curl -X PATCH http://localhost:3000/api/assets/<asset-id>/metadata \
   -H 'Content-Type: application/json' \
-  -d '{"title":"Rihanna in Marc Jacobs","caption":"Rihanna arrives at the Met Gala","backstory":"Photographed shortly before the arrival."}'
+  -d '{"title":"Rihanna in Marc Jacobs","caption":"Rihanna arrives at the Met Gala","backstory":"Photographed shortly before the arrival.","hideFromSearch":false}'
 ```
 
 Every metadata save recalculates decisions from the stored recognition result without calling
@@ -339,7 +343,7 @@ tie-breakers. Cursors are bound to the celebrity and filters, so they cannot be 
 different result set.
 
 Retrieval starts from published gallery usages and returns only assets whose requested celebrity
-association is `APPROVED`. The stored decision-engine version, recognition revision, and source-text
+association has `searchDecision: APPROVED`. The stored decision-engine version, recognition revision, and source-text
 revision must still match the asset's current state. Review-only, stale, draft, and failed-recognition
 records are excluded.
 
@@ -355,7 +359,7 @@ AWS_REGION=us-east-1
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DATABASE=celeb_face_match
 UPLOAD_DIR=data/uploads
-RECOGNITION_APPROVAL_THRESHOLD=90
+RECOGNITION_APPROVAL_THRESHOLD=99
 ```
 
 The application accepts `aws-rekognition` or `fake`:

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getPhotoAsset, uploadPhotoAssets } from "./api";
+import { getPhotoAsset, updatePhotoMetadata, uploadPhotoAssets } from "./api";
 
 const assetSummary = {
   assetId: "64b000000000000000000001",
@@ -14,7 +14,6 @@ const assetSummary = {
   mimeType: "image/jpeg",
   originalFilename: "rihanna-met-gala.jpg",
   recognitionStatus: "QUEUED",
-  searchReady: false,
   sizeBytes: 4,
   sourceText: {
     altText: null,
@@ -72,5 +71,44 @@ describe("asset API client", () => {
 
     await expect(getPhotoAsset("64b000000000000000000001"))
       .rejects.toThrow("The asset was not found.");
+  });
+
+  it("saves the search visibility override with photo metadata", async () => {
+    const detail = {
+      ...assetSummary,
+      enrichment: {
+        associations: [],
+        decisionEngineVersion: null,
+        evaluatedAt: null,
+        hideFromSearch: true,
+        recognitionRevision: null,
+        sourceTextRevision: null,
+      },
+      recognition: {
+        attemptNumber: 0,
+        completedAt: null,
+        lastError: null,
+        provider: "aws-rekognition",
+        result: null,
+        revision: 1,
+        status: "QUEUED",
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify(detail),
+      { headers: { "Content-Type": "application/json" }, status: 200 },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(updatePhotoMetadata(assetSummary.assetId, { hideFromSearch: true }))
+      .resolves.toMatchObject({ enrichment: { hideFromSearch: true } });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/assets/${assetSummary.assetId}/metadata`,
+      expect.objectContaining({
+        body: JSON.stringify({ hideFromSearch: true }),
+        method: "PATCH",
+      }),
+    );
   });
 });
