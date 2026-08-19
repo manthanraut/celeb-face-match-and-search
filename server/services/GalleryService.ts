@@ -50,6 +50,13 @@ export class GalleryService {
           "Gallery tags resolve to more than one event or year.",
         );
       }
+      if (update.published && resolution.status === "UNKNOWN") {
+        throw new ApiError(
+          400,
+          "PUBLISHED_GALLERY_EVENT_REQUIRED",
+          "A published gallery must include Event Metadata with an event and year.",
+        );
+      }
 
       const existingAssetIds = await this.#assetRepository.findExistingAssetIds(update.assetIds);
       if (existingAssetIds.size !== update.assetIds.length) {

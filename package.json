@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch server/index.ts",
     "build": "npm run typecheck && vite build && tsc --project tsconfig.server.json",
+    "import:vogue": "tsx scripts/import-vogue-assets.ts",
     "start": "node dist-server/server/index.js",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.server.json --noEmit && tsc --project tsconfig.test.json",
     "test": "vitest run"
