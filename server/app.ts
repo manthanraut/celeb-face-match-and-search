@@ -1,13 +1,12 @@
-import express from "express";
+import express, { type Express } from "express";
 
-import { apiRouter } from "./routes/api.js";
+import { createApiRouter, type ApiRouterDependencies } from "./routes/api.js";
 
-export function createApp() {
+export function createApp(dependencies: ApiRouterDependencies): Express {
   const app = express();
 
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "1mb" }));
-  app.use("/api", apiRouter);
+  app.use("/api", createApiRouter(dependencies));
 
   return app;
 }
