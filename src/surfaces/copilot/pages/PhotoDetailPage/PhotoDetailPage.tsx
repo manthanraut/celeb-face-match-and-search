@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 
+import type { GalleryEventContext } from "../../../../../shared/galleries";
 import { createPhotoEditData, formatLastModified } from "../../../../features/assets/photoEditData";
 import {
-  useAddPhotoToContent,
   usePhotoAsset,
   usePhotoEventMetadata,
   usePhotoImageDimensions,
-  useUpdatePhotoMetadata,
+  useSavePhoto,
 } from "../../../../features/assets/hooks";
 
 import { AiDiscoveryMetadataSection } from "./AiDiscoveryMetadataSection";
@@ -29,20 +29,46 @@ function LinkIcon() {
   );
 }
 
+const contentEventOptions = [
+  { id: "met-gala", name: "Met Gala" },
+  { id: "oscars", name: "Oscars" },
+  { id: "vogue-world", name: "Vogue World" },
+  { id: "golden-globes", name: "Golden Globe" },
+] as const;
+const contentEventYears = [2026, 2025, 2024, 2023] as const;
+
+function randomItem<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length)]!;
+}
+
 export function PhotoDetailPage() {
   const { assetId = "" } = useParams();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [hideFromSearchDraft, setHideFromSearchDraft] = useState<boolean | null>(null);
+  const [eventMetadataDraft, setEventMetadataDraft] = useState<GalleryEventContext | null>(null);
+  const [isGeneratingEventMetadata, setIsGeneratingEventMetadata] = useState(false);
+  const eventGenerationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const assetQuery = usePhotoAsset(assetId);
   const eventMetadataQuery = usePhotoEventMetadata(assetId);
   const dimensionsQuery = usePhotoImageDimensions(assetQuery.data?.links.image);
-  const addToContentMutation = useAddPhotoToContent(assetId);
-  const metadataMutation = useUpdatePhotoMetadata(assetId);
+  const saveMutation = useSavePhoto(assetId);
 
   useEffect(() => {
+    if (eventGenerationTimer.current) {
+      clearTimeout(eventGenerationTimer.current);
+      eventGenerationTimer.current = null;
+    }
     setHasUnsavedChanges(false);
     setHideFromSearchDraft(null);
+    setEventMetadataDraft(null);
+    setIsGeneratingEventMetadata(false);
   }, [assetId, assetQuery.data?.sourceText.revision]);
+
+  useEffect(() => () => {
+    if (eventGenerationTimer.current) {
+      clearTimeout(eventGenerationTimer.current);
+    }
+  }, []);
 
   if (assetQuery.isPending || (assetQuery.data && dimensionsQuery.isPending)) {
     return (
@@ -78,6 +104,7 @@ export function PhotoDetailPage() {
   }
 
   const asset = assetQuery.data;
+  const eventMetadata = eventMetadataDraft ?? eventMetadataQuery.data?.event ?? null;
   const hideFromSearch = hideFromSearchDraft ?? asset.enrichment.hideFromSearch;
   const photo = createPhotoEditData(asset, dimensionsQuery.data);
 
@@ -105,12 +132,15 @@ export function PhotoDetailPage() {
             <PhotoMetadataPanel photo={photo} />
             <PhotoDetailsForm
               formId="photo-details-form"
-              isSaved={metadataMutation.isSuccess}
+              isSaved={saveMutation.isSuccess}
               key={`${asset.assetId}-${asset.sourceText.revision}`}
               onDirtyChange={setHasUnsavedChanges}
-              onSave={(sourceText) => metadataMutation.mutate({
-                ...sourceText,
-                hideFromSearch,
+              onSave={(sourceText) => saveMutation.mutate({
+                eventMetadata: eventMetadataDraft,
+                sourceText: {
+                  ...sourceText,
+                  hideFromSearch,
+                },
               })}
               photo={photo}
               sourceText={asset.sourceText}
@@ -120,19 +150,30 @@ export function PhotoDetailPage() {
 
         <AiDiscoveryMetadataSection
           asset={asset}
-          eventMetadata={eventMetadataQuery.data?.event ?? null}
+          eventMetadata={eventMetadata}
           eventMetadataError={
             eventMetadataQuery.error instanceof Error
               ? eventMetadataQuery.error.message
-              : addToContentMutation.error instanceof Error
-                ? addToContentMutation.error.message
+              : saveMutation.error instanceof Error
+                ? saveMutation.error.message
                 : null
           }
           hideFromSearch={hideFromSearch}
-          isAddingToContent={addToContentMutation.isPending}
+          isAddingToContent={isGeneratingEventMetadata}
           isEventMetadataLoading={eventMetadataQuery.isPending}
-          isSaving={metadataMutation.isPending}
-          onAddToContent={() => addToContentMutation.mutate()}
+          isSaving={saveMutation.isPending}
+          onAddToContent={() => {
+            setIsGeneratingEventMetadata(true);
+            eventGenerationTimer.current = setTimeout(() => {
+              setEventMetadataDraft({
+                ...randomItem(contentEventOptions),
+                year: randomItem(contentEventYears),
+              });
+              setHasUnsavedChanges(true);
+              setIsGeneratingEventMetadata(false);
+              eventGenerationTimer.current = null;
+            }, 2_000);
+          }}
           onHideFromSearchChange={(checked) => {
             setHideFromSearchDraft(checked);
             setHasUnsavedChanges(true);
@@ -144,11 +185,12 @@ export function PhotoDetailPage() {
         </div>
 
         <PhotoGlobalActions
-          errorMessage={metadataMutation.error instanceof Error ? metadataMutation.error.message : null}
+          errorMessage={saveMutation.error instanceof Error ? saveMutation.error.message : null}
           formId="photo-details-form"
           hasUnsavedChanges={hasUnsavedChanges}
-          isSaved={metadataMutation.isSuccess}
-          isSaving={metadataMutation.isPending}
+          isPreparing={isGeneratingEventMetadata}
+          isSaved={saveMutation.isSuccess}
+          isSaving={saveMutation.isPending}
         />
     </div>
   );

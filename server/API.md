@@ -1446,7 +1446,7 @@ Matching is case-insensitive, accent-insensitive, and tolerant of punctuation se
 - Context updates do not run or requeue recognition.
 - Requests for the same gallery are serialized within one server process.
 
-The Copilot prototype's **Image gets added in content** button waits two seconds, randomly chooses one of `Met Gala`, `Oscars`, `Vogue World`, or `Golden Globe` and one of `2026`, `2025`, `2024`, or `2023`, then synchronizes a published gallery named `copilot-photo-<assetId>`. The resulting usage is immediately eligible for the existing `event` and `year` search filters when the celebrity association is otherwise searchable.
+The Copilot prototype's **Image gets added in content** button waits two seconds and locally chooses one of `Met Gala`, `Oscars`, `Vogue World`, or `Golden Globe` and one of `2026`, `2025`, `2024`, or `2023`. No API is called by the button. The global **Save** action then synchronizes a published gallery named `copilot-photo-<assetId>`. After that save succeeds, the resulting usage is eligible for the existing `event` and `year` search filters when the celebrity association is otherwise searchable. Refreshing before Save discards the generated values.
 
 Errors:
 

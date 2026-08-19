@@ -318,10 +318,11 @@ event can also call:
 DELETE /api/galleries/<gallery-id>/assets/<asset-id>
 ```
 
-On the Copilot photo page, **Image gets added in content** simulates this CMS event. It shows a
-two-second loading state, selects a random supported event and year, and stores a published usage
-for that image. The **Event Metadata** values are loaded back from MongoDB on refresh, and the same
-usage event/year powers the existing Verso search filters.
+On the Copilot photo page, **Image gets added in content** shows a two-second loading state and
+selects a random supported event and year locally. The generated values are persisted as a published
+image usage only when the global **Save** button is clicked. After saving, **Event Metadata** is
+loaded back from MongoDB on refresh, and the same usage event/year powers the existing Verso search
+filters.
 
 ## Verso Search and Celebrity Archives
 

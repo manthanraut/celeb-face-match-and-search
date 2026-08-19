@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { GalleryEventContext } from "../../../shared/galleries";
 import type { AssetDetail, AssetMetadataUpdate } from "./contracts";
 import { addPhotoToContent, getPhotoAsset, getPhotoEventMetadata, updatePhotoMetadata } from "./api";
 import { readImageDimensions } from "./photoSelection";
@@ -11,9 +12,6 @@ function assetQueryKey(assetId: string) {
 function eventMetadataQueryKey(assetId: string) {
   return ["photo-event-metadata", assetId] as const;
 }
-
-const contentEventOptions = ["Met Gala", "Oscars", "Vogue World", "Golden Globe"] as const;
-const contentEventYears = [2026, 2025, 2024, 2023] as const;
 
 function shouldPollForEnrichment(asset: AssetDetail | undefined) {
   if (!asset) return false;
@@ -55,29 +53,31 @@ export function usePhotoEventMetadata(assetId: string) {
   });
 }
 
-export function useAddPhotoToContent(assetId: string) {
+export function useSavePhoto(assetId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
-      const eventName = contentEventOptions[Math.floor(Math.random() * contentEventOptions.length)];
-      const year = contentEventYears[Math.floor(Math.random() * contentEventYears.length)];
-      return addPhotoToContent(assetId, eventName, year);
+    mutationFn: async ({
+      eventMetadata,
+      sourceText,
+    }: {
+      eventMetadata: GalleryEventContext | null;
+      sourceText: AssetMetadataUpdate;
+    }) => {
+      const [asset, savedEventMetadata] = await Promise.all([
+        updatePhotoMetadata(assetId, sourceText),
+        eventMetadata
+          ? addPhotoToContent(assetId, eventMetadata.name, eventMetadata.year)
+          : Promise.resolve(null),
+      ]);
+
+      return { asset, eventMetadata: savedEventMetadata };
     },
     onSuccess: (result) => {
-      queryClient.setQueryData(eventMetadataQueryKey(assetId), result);
-    },
-  });
-}
-
-export function useUpdatePhotoMetadata(assetId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (sourceText: AssetMetadataUpdate) => updatePhotoMetadata(assetId, sourceText),
-    onSuccess: (result) => {
-      queryClient.setQueryData(assetQueryKey(assetId), result);
+      queryClient.setQueryData(assetQueryKey(assetId), result.asset);
+      if (result.eventMetadata) {
+        queryClient.setQueryData(eventMetadataQueryKey(assetId), result.eventMetadata);
+      }
     },
   });
 }
