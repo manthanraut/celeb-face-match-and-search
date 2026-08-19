@@ -37,6 +37,7 @@ describe("photo edit data utilities", () => {
       sizeBytes: 2_500_000,
       sourceText: {
         altText: null,
+        backstory: null,
         caption: null,
         revision: 1,
         title: "red carpet",

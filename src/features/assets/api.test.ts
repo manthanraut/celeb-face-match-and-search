@@ -18,6 +18,7 @@ const assetSummary = {
   sizeBytes: 4,
   sourceText: {
     altText: null,
+    backstory: null,
     caption: null,
     revision: 1,
     title: "rihanna met gala",

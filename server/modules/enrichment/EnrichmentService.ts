@@ -86,6 +86,7 @@ export class EnrichmentService {
       const timestamp = this.#clock();
       const sourceText: AssetRecord["sourceText"] = {
         altText: normalizeStoredText(update.altText, asset.sourceText.altText),
+        backstory: normalizeStoredText(update.backstory, asset.sourceText.backstory),
         caption: normalizeStoredText(update.caption, asset.sourceText.caption),
         revision: asset.sourceText.revision + 1,
         title: normalizeStoredText(update.title, asset.sourceText.title),

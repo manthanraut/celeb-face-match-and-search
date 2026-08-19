@@ -91,6 +91,7 @@ function makeRecord({
     },
     sourceText: {
       altText: null,
+      backstory: null,
       caption: null,
       revision: 1,
       title: "first",
@@ -292,6 +293,7 @@ describe("AssetService ingestion", () => {
       },
       sourceText: {
         altText: null,
+        backstory: null,
         caption: null,
         revision: 1,
         title: "zendaya met gala",
@@ -592,7 +594,12 @@ describe("AssetService reads", () => {
         status: "SUCCEEDED",
       },
     });
-    updated.sourceText = { ...updated.sourceText, revision: 2, title: "Rihanna in Marc Jacobs" };
+    updated.sourceText = {
+      ...updated.sourceText,
+      backstory: "Photographed shortly before the Met Gala arrival.",
+      revision: 2,
+      title: "Rihanna in Marc Jacobs",
+    };
     updated.enrichment = {
       associations: [],
       decisionEngineVersion: 1,
@@ -604,10 +611,12 @@ describe("AssetService reads", () => {
     vi.mocked(enrichmentService.updateMetadata).mockResolvedValue(updated);
 
     const detail = await service.updateMetadata(FIRST_ASSET_ID, {
+      backstory: "Photographed shortly before the Met Gala arrival.",
       title: "Rihanna in Marc Jacobs",
     });
 
     expect(enrichmentService.updateMetadata).toHaveBeenCalledWith(FIRST_ASSET_ID, {
+      backstory: "Photographed shortly before the Met Gala arrival.",
       title: "Rihanna in Marc Jacobs",
     });
     expect(detail).toMatchObject({
@@ -619,7 +628,11 @@ describe("AssetService reads", () => {
         searchReady: false,
         sourceTextRevision: 2,
       },
-      sourceText: { revision: 2, title: "Rihanna in Marc Jacobs" },
+      sourceText: {
+        backstory: "Photographed shortly before the Met Gala arrival.",
+        revision: 2,
+        title: "Rihanna in Marc Jacobs",
+      },
     });
   });
 

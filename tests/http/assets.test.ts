@@ -3,7 +3,10 @@ import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Asset, AssetDetail, AssetUploadResult } from "../../shared/assets.js";
-import { MAX_ASSET_UPLOAD_FILE_SIZE_BYTES } from "../../shared/assets.js";
+import {
+  MAX_ASSET_BACKSTORY_LENGTH,
+  MAX_ASSET_UPLOAD_FILE_SIZE_BYTES,
+} from "../../shared/assets.js";
 import { createApp } from "../../server/app.js";
 import { ApiError } from "../../server/middleware/error-handler.js";
 import type { AssetRouteService } from "../../server/routes/assets.js";
@@ -23,6 +26,7 @@ function createAsset(overrides: Partial<Asset> = {}): Asset {
     sizeBytes: PNG_BYTES.length,
     sourceText: {
       altText: null,
+      backstory: null,
       caption: null,
       revision: 1,
       title: "rihanna at the met gala",
@@ -572,6 +576,7 @@ describe("asset API", () => {
       searchReady: true,
       sourceText: {
         altText: null,
+        backstory: "Photographed shortly before the Met Gala arrival.",
         caption: null,
         revision: 2,
         title: "Rihanna in Marc Jacobs",
@@ -584,7 +589,10 @@ describe("asset API", () => {
 
     try {
       const response = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/metadata`, {
-        body: JSON.stringify({ title: "Rihanna in Marc Jacobs" }),
+        body: JSON.stringify({
+          backstory: "Photographed shortly before the Met Gala arrival.",
+          title: "Rihanna in Marc Jacobs",
+        }),
         headers: { "Content-Type": "application/json" },
         method: "PATCH",
       });
@@ -592,8 +600,30 @@ describe("asset API", () => {
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual(updatedDetail);
       expect(assetService.updateMetadata).toHaveBeenCalledWith(ASSET_ID, {
+        backstory: "Photographed shortly before the Met Gala arrival.",
         title: "Rihanna in Marc Jacobs",
       });
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("rejects a backstory longer than the configured limit", async () => {
+    const assetService = createAssetService();
+    const testServer = await startAssetApi(assetService);
+
+    try {
+      const response = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/metadata`, {
+        body: JSON.stringify({ backstory: "a".repeat(MAX_ASSET_BACKSTORY_LENGTH + 1) }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "VALIDATION_ERROR" },
+      });
+      expect(assetService.updateMetadata).not.toHaveBeenCalled();
     } finally {
       await testServer.close();
     }

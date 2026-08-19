@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MAX_ASSET_BACKSTORY_LENGTH } from "../../../shared/assets";
+
 const recognitionProviderNameSchema = z.enum(["aws-rekognition", "fake"]);
 
 const boundingBoxSchema = z.object({
@@ -33,6 +35,7 @@ export const assetSourceTextSchema = z.object({
   title: z.string().max(500).nullable(),
   caption: z.string().max(5_000).nullable(),
   altText: z.string().max(2_000).nullable(),
+  backstory: z.string().max(MAX_ASSET_BACKSTORY_LENGTH).nullable(),
   revision: z.number().int().positive(),
 });
 
@@ -117,6 +120,7 @@ export const assetMetadataUpdateSchema = z
     title: z.string().max(500).nullable().optional(),
     caption: z.string().max(5_000).nullable().optional(),
     altText: z.string().max(2_000).nullable().optional(),
+    backstory: z.string().max(MAX_ASSET_BACKSTORY_LENGTH).nullable().optional(),
   })
   .strict()
   .refine(

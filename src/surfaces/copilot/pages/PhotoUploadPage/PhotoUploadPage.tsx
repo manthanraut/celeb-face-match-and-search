@@ -6,14 +6,16 @@ import {
   type SelectedPhoto,
 } from "../../../../features/assets/photoSelection";
 import { uploadPhotoAssets } from "../../../../features/assets/api";
+import {
+  MAX_ASSET_IMAGE_DIMENSION,
+  MAX_ASSET_IMAGE_PIXELS,
+  MAX_ASSET_UPLOAD_FILES,
+  MAX_ASSET_UPLOAD_FILE_SIZE_BYTES,
+} from "../../../../../shared/assets";
 
 import { SelectedPhotoCard } from "./SelectedPhotoCard";
 
 const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
-const MAXIMUM_FILE_SIZE = 5 * 1024 * 1024;
-const MAXIMUM_FILES_PER_UPLOAD = 10;
-const MAXIMUM_IMAGE_EDGE = 10_000;
-const MAXIMUM_IMAGE_PIXELS = 50_000_000;
 
 function UploadIcon() {
   return (
@@ -40,7 +42,7 @@ export function PhotoUploadPage() {
     files.forEach((file) => {
       const signature = createFileSignature(file);
 
-      if (!ACCEPTED_IMAGE_TYPES.has(file.type) || file.size > MAXIMUM_FILE_SIZE) {
+      if (!ACCEPTED_IMAGE_TYPES.has(file.type) || file.size > MAX_ASSET_UPLOAD_FILE_SIZE_BYTES) {
         invalidCount += 1;
         return;
       }
@@ -50,7 +52,7 @@ export function PhotoUploadPage() {
         return;
       }
 
-      if (acceptedFiles.length >= MAXIMUM_FILES_PER_UPLOAD) {
+      if (acceptedFiles.length >= MAX_ASSET_UPLOAD_FILES) {
         limitCount += 1;
         return;
       }
@@ -79,9 +81,9 @@ export function PhotoUploadPage() {
           const selectedPhoto = await createSelectedPhoto(file);
 
           if (
-            selectedPhoto.width > MAXIMUM_IMAGE_EDGE
-            || selectedPhoto.height > MAXIMUM_IMAGE_EDGE
-            || selectedPhoto.width * selectedPhoto.height > MAXIMUM_IMAGE_PIXELS
+            selectedPhoto.width > MAX_ASSET_IMAGE_DIMENSION
+            || selectedPhoto.height > MAX_ASSET_IMAGE_DIMENSION
+            || selectedPhoto.width * selectedPhoto.height > MAX_ASSET_IMAGE_PIXELS
           ) {
             URL.revokeObjectURL(selectedPhoto.previewUrl);
             selectedSignaturesRef.current.delete(createFileSignature(file));
