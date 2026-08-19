@@ -12,12 +12,14 @@ function createSearchService(): VersoSearchRouteService {
       celebrity: { displayName: "Rihanna", slug: celebritySlug },
       items: [],
       nextCursor: null,
+      total_count: 0,
     })),
     search: vi.fn(async (query) => ({
       celebrity: { displayName: "Rihanna", slug: "rihanna" },
       items: [],
       nextCursor: null,
       query: query.query,
+      total_count: 0,
     })),
   };
 }
@@ -48,6 +50,7 @@ describe("Verso search API", () => {
       await expect(response.json()).resolves.toMatchObject({
         celebrity: { slug: "rihanna" },
         query: "Rihanna",
+        total_count: 0,
       });
       expect(service.search).toHaveBeenCalledWith({
         event: "met-gala",
@@ -91,6 +94,7 @@ describe("Verso search API", () => {
       await expect(response.json()).resolves.toMatchObject({
         celebrity: { slug: "rihanna" },
         items: [],
+        total_count: 0,
       });
       expect(service.getCelebrityArchive).toHaveBeenCalledWith("rihanna", {
         event: "oscars",

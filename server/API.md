@@ -1664,6 +1664,8 @@ Errors:
 
 Both retrieval endpoints return one result per published gallery usage, not one result per unique asset. If one asset belongs to multiple matching published galleries, it can appear more than once with different `sourceGallery` values.
 
+Both responses include `total_count`, which counts distinct matching asset IDs across all pages for the current celebrity, event, and year filters. It uses the same eligibility rules as the result list, including `hideFromSearch`, but it does not count the same image more than once when that image has multiple matching gallery usages. The count does not change as the client follows `nextCursor` through the same filtered result set.
+
 Only records satisfying all of the following are returned:
 
 - The gallery usage is published.
@@ -1722,6 +1724,7 @@ Success response — `200 OK`:
   celebrity: Celebrity | null;
   items: SearchAsset[];
   nextCursor: string | null;
+  total_count: number;
 }
 ```
 
@@ -1763,7 +1766,8 @@ Success response — `200 OK`:
       }
     }
   ],
-  "nextCursor": null
+  "nextCursor": null,
+  "total_count": 1
 }
 ```
 
@@ -1774,7 +1778,8 @@ Unknown queries are successful empty results:
   "query": "Unknown Person",
   "celebrity": null,
   "items": [],
-  "nextCursor": null
+  "nextCursor": null,
+  "total_count": 0
 }
 ```
 
@@ -1842,6 +1847,7 @@ Success response — `200 OK`:
   celebrity: Celebrity;
   items: SearchAsset[];
   nextCursor: string | null;
+  total_count: number;
 }
 ```
 
@@ -1882,7 +1888,8 @@ Success response — `200 OK`:
       }
     }
   ],
-  "nextCursor": null
+  "nextCursor": null,
+  "total_count": 1
 }
 ```
 

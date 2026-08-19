@@ -59,12 +59,14 @@ function createHarness(options: {
   identityMatches?: CelebrityCatalogEntry[];
   repositoryPage?: Awaited<ReturnType<VersoSearchRepository["findApprovedCelebrityUsages"]>>;
   slugMatch?: CelebrityCatalogEntry | null;
+  totalCount?: number;
 } = {}) {
   const celebrityRepository: CelebrityLookupRepository = {
     findByNormalizedIdentity: vi.fn(async () => options.identityMatches ?? [RIHANNA]),
     findBySlug: vi.fn(async () => options.slugMatch === undefined ? RIHANNA : options.slugMatch),
   };
   const searchRepository: VersoSearchRepository = {
+    countApprovedCelebrityAssets: vi.fn(async () => options.totalCount ?? 1),
     findApprovedCelebrityUsages: vi.fn(async () =>
       options.repositoryPage ?? { hasMore: false, items: [ITEM] },
     ),
@@ -107,6 +109,7 @@ describe("VersoSearchService", () => {
       ],
       nextCursor: null,
       query: "Robyn Rihanna Fenty",
+      total_count: 1,
     });
 
     expect(celebrityRepository.findByNormalizedIdentity).toHaveBeenCalledWith(
@@ -119,6 +122,11 @@ describe("VersoSearchService", () => {
       filters: { event: "met-gala", year: 2027 },
       limit: 20,
     });
+    expect(searchRepository.countApprovedCelebrityAssets).toHaveBeenCalledWith({
+      celebritySlug: "rihanna",
+      decisionEngineVersion: 2,
+      filters: { event: "met-gala", year: 2027 },
+    });
   });
 
   it("returns an empty resolved response for an unknown query", async () => {
@@ -129,8 +137,10 @@ describe("VersoSearchService", () => {
       items: [],
       nextCursor: null,
       query: "Unknown Person",
+      total_count: 0,
     });
     expect(searchRepository.findApprovedCelebrityUsages).not.toHaveBeenCalled();
+    expect(searchRepository.countApprovedCelebrityAssets).not.toHaveBeenCalled();
   });
 
   it("rejects an alias shared by multiple celebrities", async () => {
@@ -152,6 +162,7 @@ describe("VersoSearchService", () => {
     ).resolves.toMatchObject({
       celebrity: { displayName: "Rihanna", slug: "rihanna" },
       items: [{ assetId: ITEM.assetId }],
+      total_count: 1,
     });
     expect(existing.celebrityRepository.findBySlug).toHaveBeenCalledWith("rihanna");
 

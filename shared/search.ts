@@ -55,6 +55,7 @@ const versoSearchPageShape = {
   celebrity: versoCelebritySchema,
   items: z.array(versoSearchAssetSchema),
   nextCursor: z.string().nullable(),
+  total_count: z.number().int().nonnegative(),
 };
 
 export const celebritySearchResponseSchema = z.object({
