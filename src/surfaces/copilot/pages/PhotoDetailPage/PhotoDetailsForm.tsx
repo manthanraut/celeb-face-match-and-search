@@ -1,9 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import type {
+  AssetMetadataUpdate,
+  AssetSourceText,
+} from "../../../../features/assets/contracts";
 import type { PhotoEditData } from "../../../../features/assets/photoEditData";
 
 interface PhotoDetailsFormProps {
+  formId: string;
+  isSaved: boolean;
+  onDirtyChange: (isDirty: boolean) => void;
+  onSave: (sourceText: AssetMetadataUpdate) => void;
   photo: PhotoEditData;
+  sourceText: AssetSourceText;
 }
 
 const fieldStyles =
@@ -38,13 +47,34 @@ function FormattingControls() {
   );
 }
 
-export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
-  const [altText, setAltText] = useState("Image may contain: Adult, Person, Clothing, and Glove");
-  const [title, setTitle] = useState(photo.name);
+export function PhotoDetailsForm({
+  formId,
+  isSaved,
+  onDirtyChange,
+  onSave,
+  photo,
+  sourceText,
+}: PhotoDetailsFormProps) {
+  const [altText, setAltText] = useState(sourceText.altText ?? "");
+  const [caption, setCaption] = useState(sourceText.caption ?? "");
+  const [title, setTitle] = useState(sourceText.title ?? photo.name);
   const wordCount = altText.trim() ? altText.trim().split(/\s+/).length : 0;
 
+  useEffect(() => {
+    if (isSaved) {
+      onDirtyChange(false);
+    }
+  }, [isSaved, onDirtyChange]);
+
   return (
-    <form className="min-w-0" onSubmit={(event) => event.preventDefault()}>
+    <form
+      className="min-w-0"
+      id={formId}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave({ altText: altText || null, caption: caption || null, title: title || null });
+      }}
+    >
       <div>
         <label className="mb-1.5 block text-base font-bold" htmlFor="photo-title">
           Title
@@ -55,7 +85,11 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
             className={`${fieldStyles} pr-12`}
             id="photo-title"
             name="title"
-            onChange={(event) => setTitle(event.target.value)}
+            maxLength={500}
+            onChange={(event) => {
+              setTitle(event.target.value);
+              onDirtyChange(true);
+            }}
             type="text"
             value={title}
           />
@@ -73,7 +107,11 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
             className={`${fieldStyles} pr-12`}
             id="photo-alt-text"
             name="altText"
-            onChange={(event) => setAltText(event.target.value)}
+            maxLength={2_000}
+            onChange={(event) => {
+              setAltText(event.target.value);
+              onDirtyChange(true);
+            }}
             type="text"
             value={altText}
           />
@@ -93,11 +131,22 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
         </label>
         <FormattingControls />
         <textarea
+          aria-describedby="global-caption-guidance"
           autoComplete="off"
           className={`${fieldStyles} min-h-16 resize-y`}
           id="global-caption"
           name="globalCaption"
+          maxLength={5_000}
+          onChange={(event) => {
+            setCaption(event.target.value);
+            onDirtyChange(true);
+          }}
+          value={caption}
         />
+        <p className="mt-1 text-xs leading-5 text-neutral-600" id="global-caption-guidance">
+          Celebrity names in the title or global caption confirm AWS matches below the server-configured automatic-approval threshold.
+          If AWS returns no match, use the format “Celebrity in Designer” to create a metadata-only association.
+        </p>
       </div>
 
       <fieldset className="mt-4">
@@ -146,6 +195,7 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
           name="internalNotes"
         />
       </div>
+
     </form>
   );
 }
