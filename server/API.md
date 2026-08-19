@@ -540,6 +540,7 @@ interface GalleryEvent {
 | `GET` | `/api/assets/:assetId/image` | Retrieve stored image bytes. |
 | `POST` | `/api/assets/:assetId/recognition/retry` | Requeue failed or indeterminate recognition. |
 | `PATCH` | `/api/assets/:assetId/metadata` | Update editorial metadata and recalculate decisions. |
+| `PATCH` | `/api/assets/:assetId/editorial` | Save photo metadata and optional Event Metadata in one request. |
 | `GET` | `/api/galleries/assets/:assetId/event-metadata` | Retrieve the image's latest persisted content event. |
 | `PUT` | `/api/galleries/:galleryId/context` | Synchronize the complete gallery snapshot. |
 | `DELETE` | `/api/galleries/:galleryId/assets/:assetId` | Remove one asset/gallery association. |
@@ -1296,6 +1297,131 @@ Example empty update:
 
 Metadata can be updated while recognition is still queued or processing, but celebrity inference is not performed until recognition has succeeded.
 
+### Save photo editorial state
+
+This is the combined save endpoint used by the Copilot photo page. It validates the photo metadata and optional Event Metadata as one request, updates the photo and its celebrity decisions, and, when Event Metadata is supplied, associates the image with its generated Copilot content record.
+
+The existing metadata and gallery-context endpoints remain available for clients that manage those resources separately.
+
+| Property | Value |
+| --- | --- |
+| Method | `PATCH` |
+| Path | `/api/assets/:assetId/editorial` |
+| Authentication | None |
+| Required headers | `Content-Type: application/json` |
+| Query | None |
+
+Path parameters:
+
+| Name | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `assetId` | string | Yes | 24 hexadecimal characters. |
+
+Request body:
+
+| Field | Type | Required | Constraints and behavior |
+| --- | --- | --- | --- |
+| `metadata` | object | Yes | Same strict schema and behavior as [Update asset metadata](#update-asset-metadata). At least one metadata field must be present. |
+| `eventMetadata` | object | No | When omitted, Event Metadata is left unchanged. When supplied, all three nested fields are required. |
+| `eventMetadata.id` | string enum | When `eventMetadata` is supplied | `met-gala`, `grammys`, `oscars`, `golden-globes`, or `vogue-world`. The server uses this ID to select the canonical stored event name. |
+| `eventMetadata.name` | string | When `eventMetadata` is supplied | Required for schema compatibility. The server does not trust this value; it derives the event tag from `eventMetadata.id`. |
+| `eventMetadata.year` | integer | When `eventMetadata` is supplied | From 1900 through 2199. |
+
+Both the outer body and the nested `metadata` object are strict. Unknown fields return `400 VALIDATION_ERROR`. The complete body is validated before either service is called.
+
+Example request:
+
+```bash
+curl -X PATCH \
+  http://localhost:3000/api/assets/64b000000000000000000001/editorial \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "metadata": {
+      "title": "Rihanna in Marc Jacobs",
+      "caption": "Rihanna arrives at the Met Gala.",
+      "altText": "Rihanna on the red carpet.",
+      "backstory": "Photographed shortly before the Met Gala arrival.",
+      "hideFromSearch": false
+    },
+    "eventMetadata": {
+      "id": "met-gala",
+      "name": "Met Gala",
+      "year": 2026
+    }
+  }'
+```
+
+Success response — `200 OK`:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `asset` | `AssetDetail` | Complete updated asset, recognition, and recalculated enrichment state. |
+| `eventMetadata` | object or `null` | `{ "event": GalleryEvent }` when Event Metadata was supplied; `null` when it was omitted. |
+
+```json
+{
+  "asset": {
+    "assetId": "64b000000000000000000001",
+    "originalFilename": "rihanna-met-gala.jpg",
+    "mimeType": "image/jpeg",
+    "sizeBytes": 248731,
+    "sourceText": {
+      "title": "Rihanna in Marc Jacobs",
+      "caption": "Rihanna arrives at the Met Gala.",
+      "altText": "Rihanna on the red carpet.",
+      "backstory": "Photographed shortly before the Met Gala arrival.",
+      "revision": 2
+    },
+    "recognitionStatus": "QUEUED",
+    "createdAt": "2027-05-04T12:00:00.000Z",
+    "updatedAt": "2027-05-04T12:01:00.000Z",
+    "links": {
+      "self": "/api/assets/64b000000000000000000001",
+      "image": "/api/assets/64b000000000000000000001/image",
+      "admin": "/admin/photos/64b000000000000000000001"
+    },
+    "enrichment": {
+      "associations": [],
+      "decisionEngineVersion": 2,
+      "evaluatedAt": "2027-05-04T12:01:00.000Z",
+      "hideFromSearch": false,
+      "recognitionRevision": 1,
+      "sourceTextRevision": 2
+    },
+    "recognition": {
+      "status": "QUEUED",
+      "provider": "aws-rekognition",
+      "attemptNumber": 0,
+      "revision": 1,
+      "completedAt": null,
+      "lastError": null,
+      "result": null
+    }
+  },
+  "eventMetadata": {
+    "event": {
+      "id": "met-gala",
+      "name": "Met Gala",
+      "year": 2026
+    }
+  }
+}
+```
+
+Errors:
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | `INVALID_JSON` | Malformed JSON. |
+| `400` | `VALIDATION_ERROR` | Invalid asset metadata, event ID/year, unknown field, or missing required nested field. |
+| `400` | `AMBIGUOUS_GALLERY_EVENT` | The derived event tag cannot resolve to one canonical event and year. This should not occur for a valid request generated by the current client. |
+| `404` | `ASSET_NOT_FOUND` or `GALLERY_ASSET_NOT_FOUND` | The asset does not exist when either operation checks it. |
+| `409` | `ASSET_UPDATE_CONFLICT` | Recognition or metadata changed repeatedly while the asset update was being applied. |
+| `413` | `PAYLOAD_TOO_LARGE` | JSON body exceeds 1 MiB. |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected database failure. |
+
+This endpoint is one HTTP operation, but it is not a MongoDB transaction: asset metadata and gallery usage are stored in separate collections, and the default local standalone MongoDB configuration does not support cross-collection transactions. If the asset write succeeds and the later gallery-usage write fails unexpectedly, the request returns an error but the photo metadata may already be saved. Retrying the same request is safe; the gallery usage is upserted and the metadata update is idempotent at the field-value level, although its revision increments again.
+
 ## Gallery APIs
 
 ### Get asset event metadata
@@ -1425,7 +1551,7 @@ A canonical event is resolved only when one tag contains both a supported event 
 | `Met Gala` | `met-gala` | `Met Gala` |
 | `Grammy`, `Grammys`, or `Grammy Awards` | `grammys` | `Grammys` |
 | `Oscar`, `Oscars`, or `Academy Awards` | `oscars` | `Oscars` |
-| `Golden Globe` or `Golden Globes` | `golden-globes` | `Golden Globe` |
+| `Golden Globe` or `Golden Globes` | `golden-globes` | `Golden Globes` |
 | `Vogue World` | `vogue-world` | `Vogue World` |
 
 Matching is case-insensitive, accent-insensitive, and tolerant of punctuation separators.
@@ -2062,6 +2188,7 @@ Use asset detail, health/readiness responses, MongoDB inspection, and local proc
 - No external queue; recognition work is stored in MongoDB.
 - Local storage is not independently durable or multi-instance safe.
 - Upload batches are not transactional across all images.
+- Combined photo editorial saves are one HTTP request but are not transactional across the asset and gallery-usage collections when MongoDB runs in the default standalone configuration.
 - Search is exact normalized name/alias lookup only.
 - Designer lookup and semantic/fuzzy search are not implemented.
 - Search results are gallery usages, so the same asset can appear more than once.

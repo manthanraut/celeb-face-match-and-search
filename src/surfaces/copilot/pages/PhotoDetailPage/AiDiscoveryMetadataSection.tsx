@@ -328,7 +328,7 @@ export function AiDiscoveryMetadataSection({
               <h3 className="text-sm font-bold" id="event-metadata-title">Event Metadata</h3>
               <button
                 className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[#2948b8] px-3 py-2 text-xs font-bold text-[#2948b8] hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8] disabled:cursor-not-allowed disabled:border-neutral-300 disabled:text-neutral-500"
-                disabled={isAddingToContent}
+                disabled={isAddingToContent || isSaving}
                 onClick={onAddToContent}
                 type="button"
               >
@@ -345,7 +345,11 @@ export function AiDiscoveryMetadataSection({
               <div className="rounded-sm border border-neutral-300 p-3">
                 <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Event</dt>
                 <dd className="mt-1 text-sm font-bold">
-                  {isEventMetadataLoading ? "Loading…" : eventMetadata?.name ?? "Not yet associated"}
+                  {isEventMetadataLoading
+                    ? "Loading…"
+                    : eventMetadata?.id === "golden-globes"
+                      ? "Golden Globe"
+                      : eventMetadata?.name ?? "Not yet associated"}
                 </dd>
               </div>
               <div className="rounded-sm border border-neutral-300 p-3">

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { GalleryEventContext } from "../../../shared/galleries";
 import type { AssetDetail, AssetMetadataUpdate } from "./contracts";
-import { addPhotoToContent, getPhotoAsset, getPhotoEventMetadata, updatePhotoMetadata } from "./api";
+import { getPhotoAsset, getPhotoEventMetadata, savePhotoChanges } from "./api";
 import { readImageDimensions } from "./photoSelection";
 
 function assetQueryKey(assetId: string) {
@@ -57,22 +57,13 @@ export function useSavePhoto(assetId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
+    mutationFn: ({
       eventMetadata,
       sourceText,
     }: {
       eventMetadata: GalleryEventContext | null;
       sourceText: AssetMetadataUpdate;
-    }) => {
-      const [asset, savedEventMetadata] = await Promise.all([
-        updatePhotoMetadata(assetId, sourceText),
-        eventMetadata
-          ? addPhotoToContent(assetId, eventMetadata.name, eventMetadata.year)
-          : Promise.resolve(null),
-      ]);
-
-      return { asset, eventMetadata: savedEventMetadata };
-    },
+    }) => savePhotoChanges(assetId, sourceText, eventMetadata),
     onSuccess: (result) => {
       queryClient.setQueryData(assetQueryKey(assetId), result.asset);
       if (result.eventMetadata) {

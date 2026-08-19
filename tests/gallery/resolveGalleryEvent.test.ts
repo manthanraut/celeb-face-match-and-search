@@ -8,7 +8,7 @@ describe("resolveGalleryEvent", () => {
     ["GRAMMY AWARDS: 2026", "grammys", "Grammys", 2026],
     ["Oscars_2025", "oscars", "Oscars", 2025],
     ["Academy Awards / 2024", "oscars", "Oscars", 2024],
-    ["Golden Globe 2023", "golden-globes", "Golden Globe", 2023],
+    ["Golden Globe 2023", "golden-globes", "Golden Globes", 2023],
     ["Vogue—World—2022", "vogue-world", "Vogue World", 2022],
   ])("resolves %s to canonical event context", (tag, id, name, year) => {
     expect(resolveGalleryEvent([tag])).toEqual({

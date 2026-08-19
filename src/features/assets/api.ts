@@ -10,7 +10,12 @@ import {
   assetEventMetadataResponseSchema,
   galleryContextResponseSchema,
   type AssetEventMetadataResponse,
+  type GalleryEventContext,
 } from "../../../shared/galleries";
+import {
+  photoSaveRequestSchema,
+  photoSaveResponseSchema,
+} from "../../../shared/photoSave";
 
 export interface UploadPhotoAssetInput {
   clientAssetId: string;
@@ -76,6 +81,27 @@ export async function addPhotoToContent(
 
   const result = galleryContextResponseSchema.parse(await response.json());
   return assetEventMetadataResponseSchema.parse({ event: result.event });
+}
+
+export async function savePhotoChanges(
+  assetId: string,
+  sourceText: AssetMetadataUpdate,
+  eventMetadata: GalleryEventContext | null,
+) {
+  const update = photoSaveRequestSchema.parse({
+    ...(eventMetadata ? { eventMetadata } : {}),
+    metadata: sourceText,
+  });
+  const response = await fetch(`/api/assets/${assetId}/editorial`, {
+    body: JSON.stringify(update),
+    headers: { "Content-Type": "application/json" },
+    method: "PATCH",
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+
+  return photoSaveResponseSchema.parse(await response.json());
 }
 
 export async function uploadPhotoAssets(

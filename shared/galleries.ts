@@ -14,7 +14,7 @@ export const canonicalEventIdSchema = z.enum(canonicalEventIds);
 export type CanonicalEventId = z.infer<typeof canonicalEventIdSchema>;
 
 export const canonicalEventNames: Readonly<Record<CanonicalEventId, string>> = {
-  "golden-globes": "Golden Globe",
+  "golden-globes": "Golden Globes",
   grammys: "Grammys",
   "met-gala": "Met Gala",
   oscars: "Oscars",

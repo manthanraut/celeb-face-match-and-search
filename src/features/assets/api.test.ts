@@ -4,9 +4,11 @@ import {
   addPhotoToContent,
   getPhotoAsset,
   getPhotoEventMetadata,
+  savePhotoChanges,
   updatePhotoMetadata,
   uploadPhotoAssets,
 } from "./api";
+import { assetDetailSchema } from "./contracts";
 
 const assetSummary = {
   assetId: "64b000000000000000000001",
@@ -30,6 +32,27 @@ const assetSummary = {
   },
   updatedAt: "2027-05-04T12:00:00.000Z",
 };
+
+const assetDetail = assetDetailSchema.parse({
+  ...assetSummary,
+  enrichment: {
+    associations: [],
+    decisionEngineVersion: null,
+    evaluatedAt: null,
+    hideFromSearch: true,
+    recognitionRevision: null,
+    sourceTextRevision: null,
+  },
+  recognition: {
+    attemptNumber: 0,
+    completedAt: null,
+    lastError: null,
+    provider: "aws-rekognition",
+    result: null,
+    revision: 1,
+    status: "QUEUED",
+  },
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -120,28 +143,8 @@ describe("asset API client", () => {
   });
 
   it("saves the search visibility override with photo metadata", async () => {
-    const detail = {
-      ...assetSummary,
-      enrichment: {
-        associations: [],
-        decisionEngineVersion: null,
-        evaluatedAt: null,
-        hideFromSearch: true,
-        recognitionRevision: null,
-        sourceTextRevision: null,
-      },
-      recognition: {
-        attemptNumber: 0,
-        completedAt: null,
-        lastError: null,
-        provider: "aws-rekognition",
-        result: null,
-        revision: 1,
-        status: "QUEUED",
-      },
-    };
     const fetchMock = vi.fn().mockResolvedValue(new Response(
-      JSON.stringify(detail),
+      JSON.stringify(assetDetail),
       { headers: { "Content-Type": "application/json" }, status: 200 },
     ));
     vi.stubGlobal("fetch", fetchMock);
@@ -153,6 +156,39 @@ describe("asset API client", () => {
       `/api/assets/${assetSummary.assetId}/metadata`,
       expect.objectContaining({
         body: JSON.stringify({ hideFromSearch: true }),
+        method: "PATCH",
+      }),
+    );
+  });
+
+  it("saves photo and Event Metadata in one API request", async () => {
+    const event = { id: "met-gala", name: "Met Gala", year: 2026 } as const;
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({
+        asset: assetDetail,
+        eventMetadata: { event },
+      }),
+      { headers: { "Content-Type": "application/json" }, status: 200 },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(savePhotoChanges(
+      assetSummary.assetId,
+      { title: "Updated title" },
+      event,
+    )).resolves.toEqual({
+      asset: assetDetail,
+      eventMetadata: { event },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/assets/${assetSummary.assetId}/editorial`,
+      expect.objectContaining({
+        body: JSON.stringify({
+          eventMetadata: event,
+          metadata: { title: "Updated title" },
+        }),
         method: "PATCH",
       }),
     );

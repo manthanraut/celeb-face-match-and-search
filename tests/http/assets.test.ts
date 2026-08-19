@@ -10,6 +10,7 @@ import {
 import { createApp } from "../../server/app.js";
 import { ApiError } from "../../server/middleware/error-handler.js";
 import type { AssetRouteService } from "../../server/routes/assets.js";
+import type { GalleryRouteService } from "../../server/routes/galleries.js";
 import { createUnusedGalleryRouteService } from "../helpers/gallery-route-service.js";
 import { startTestHttpServer } from "../helpers/http-server.js";
 import { createUnusedVersoSearchRouteService } from "../helpers/verso-search-route-service.js";
@@ -91,12 +92,15 @@ function createAssetService(overrides: Partial<AssetRouteService> = {}): AssetRo
   };
 }
 
-async function startAssetApi(assetService: AssetRouteService) {
+async function startAssetApi(
+  assetService: AssetRouteService,
+  galleryService: GalleryRouteService = createUnusedGalleryRouteService(),
+) {
   return startTestHttpServer(
     createApp({
       assetService,
       checkDatabaseReadiness: () => Promise.resolve(),
-      galleryService: createUnusedGalleryRouteService(),
+      galleryService,
       recognitionProvider: "aws-rekognition",
       versoSearchService: createUnusedVersoSearchRouteService(),
     }),
@@ -604,6 +608,98 @@ describe("asset API", () => {
         hideFromSearch: true,
         title: "Rihanna in Marc Jacobs",
       });
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("saves photo metadata and Event Metadata through one endpoint", async () => {
+    const updatedDetail = createAssetDetail({
+      enrichment: {
+        associations: [],
+        decisionEngineVersion: 1,
+        evaluatedAt: "2027-05-04T12:01:00.000Z",
+        hideFromSearch: true,
+        recognitionRevision: 1,
+        sourceTextRevision: 2,
+      },
+      sourceText: {
+        altText: null,
+        backstory: null,
+        caption: null,
+        revision: 2,
+        title: "Rihanna at the Met Gala",
+      },
+    });
+    const assetService = createAssetService({
+      updateMetadata: vi.fn(async () => updatedDetail),
+    });
+    const galleryService: GalleryRouteService = {
+      ...createUnusedGalleryRouteService(),
+      syncContext: vi.fn(async (galleryId, update) => ({
+        assetCount: update.assetIds.length,
+        event: { id: "met-gala" as const, name: "Met Gala", year: 2026 },
+        galleryId,
+        published: update.published,
+      })),
+    };
+    const testServer = await startAssetApi(assetService, galleryService);
+
+    try {
+      const response = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/editorial`, {
+        body: JSON.stringify({
+          eventMetadata: { id: "met-gala", name: "Untrusted event name", year: 2026 },
+          metadata: {
+            hideFromSearch: true,
+            title: "Rihanna at the Met Gala",
+          },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        asset: updatedDetail,
+        eventMetadata: {
+          event: { id: "met-gala", name: "Met Gala", year: 2026 },
+        },
+      });
+      expect(assetService.updateMetadata).toHaveBeenCalledWith(ASSET_ID, {
+        hideFromSearch: true,
+        title: "Rihanna at the Met Gala",
+      });
+      expect(galleryService.syncContext).toHaveBeenCalledWith(`copilot-photo-${ASSET_ID}`, {
+        assetIds: [ASSET_ID],
+        published: true,
+        tags: ["Met Gala 2026"],
+      });
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("validates the complete combined save before changing photo metadata", async () => {
+    const assetService = createAssetService();
+    const galleryService: GalleryRouteService = {
+      ...createUnusedGalleryRouteService(),
+      syncContext: vi.fn(),
+    };
+    const testServer = await startAssetApi(assetService, galleryService);
+
+    try {
+      const response = await fetch(`${testServer.baseUrl}/api/assets/${ASSET_ID}/editorial`, {
+        body: JSON.stringify({
+          eventMetadata: { id: "unsupported-event", name: "Unsupported", year: 2026 },
+          metadata: { title: "Rihanna" },
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+      });
+
+      expect(response.status).toBe(400);
+      expect(assetService.updateMetadata).not.toHaveBeenCalled();
+      expect(galleryService.syncContext).not.toHaveBeenCalled();
     } finally {
       await testServer.close();
     }
