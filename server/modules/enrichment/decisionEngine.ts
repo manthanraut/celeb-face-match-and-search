@@ -10,6 +10,7 @@ export interface CelebrityDecisionInput {
   recognitionResult: RecognitionResult | null;
   sourceText: {
     altText: string | null;
+    backstory: string | null;
     caption: string | null;
     title: string | null;
   };

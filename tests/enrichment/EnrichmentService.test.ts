@@ -44,6 +44,7 @@ function createAsset(overrides: Partial<AssetRecord> = {}): AssetRecord {
     },
     sourceText: {
       altText: "A red carpet arrival",
+      backstory: null,
       caption: "A guest arrives",
       revision: 1,
       title: "Met Gala arrival",
@@ -144,6 +145,7 @@ describe("EnrichmentService", () => {
 
     expect(updated.sourceText).toEqual({
       altText: "A red carpet arrival",
+      backstory: null,
       caption: "A guest arrives",
       revision: 2,
       title: "Rihanna in Marc Jacobs",
@@ -167,6 +169,42 @@ describe("EnrichmentService", () => {
         expectedSourceTextRevision: 1,
       }),
     );
+  });
+
+  it("normalizes backstory updates without using them as celebrity evidence", async () => {
+    const { service } = createHarness();
+
+    const updated = await service.updateMetadata(ASSET_ID, {
+      backstory: "  Rihanna in Marc Jacobs\r\nPhotographed before the gala.  ",
+    });
+
+    expect(updated.sourceText.backstory).toBe(
+      "Rihanna in Marc Jacobs\nPhotographed before the gala.",
+    );
+    expect(updated.enrichment.associations[0]).toMatchObject({
+      decision: "NEEDS_REVIEW",
+      evidenceFields: [],
+    });
+    expect(updated.enrichment.searchReady).toBe(false);
+  });
+
+  it("clears a whitespace-only backstory while preserving omitted metadata", async () => {
+    const asset = createAsset({
+      sourceText: {
+        ...createAsset().sourceText,
+        backstory: "Existing editorial context",
+      },
+    });
+    const { service } = createHarness(asset);
+
+    const updated = await service.updateMetadata(ASSET_ID, { backstory: "  \n  " });
+
+    expect(updated.sourceText).toMatchObject({
+      altText: asset.sourceText.altText,
+      backstory: null,
+      caption: asset.sourceText.caption,
+      title: asset.sourceText.title,
+    });
   });
 
   it("does not infer metadata or query the catalog before recognition succeeds", async () => {

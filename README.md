@@ -12,7 +12,7 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 - Responsive Met Gala 2026 editorial gallery
 - CTA from the gallery to celebrity image discovery
 - Copilot-simulated photo selection with drag and drop, multi-select, and preview cards
-- Copilot-style photo details, editable metadata, taxonomy, and crop previews
+- Copilot-style photo uploads and editable title, caption, alt text, and backstory
 - Placeholder routes for search, bookmarks, celebrity archives, and editor tools
 - React and Express served by one development process
 - Shared, validated recognition-result contract
@@ -38,8 +38,9 @@ Open application
 
 Open /admin/photos/new
     → Select one or more local photos
+    → Upload the photos to the server
     → Open Edit Photo in a new tab
-    → Review the Copilot-style photo details page
+    → Review and save metadata on the Copilot-style photo details page
 ```
 
 The backend workflow from upload through celebrity search and archive retrieval is ready.
@@ -144,8 +145,8 @@ Stop the development server with `Ctrl+C`.
 | `/bookmarks` | Placeholder | Saved photographs |
 | `/admin` | Placeholder | Internal dashboard |
 | `/admin/photos` | Placeholder | Photo library |
-| `/admin/photos/new` | Ready | Local image selection and preview-card grid |
-| `/admin/photos/:assetId` | Ready | Copilot-style photo metadata, taxonomy, and crop previews |
+| `/admin/photos/new` | Ready | Select and upload JPEG or PNG assets to the server |
+| `/admin/photos/:assetId` | Ready | Load and edit server-backed photo metadata, including backstory |
 | `/api/health` | Ready | API and provider health check |
 | `/api/ready` | Ready | MongoDB-backed application readiness check |
 | `GET /api/assets` | Ready | Paginated photo-library assets |
@@ -265,7 +266,7 @@ to `90`. Each recognized celebrity produces one of two persisted decisions:
 | Recognition returns no celebrity and `X in Y` resolves `X` through the celebrity catalog | `APPROVED` metadata inference |
 | Recognition returns no celebrity and `X` is not in the catalog | No association |
 
-Alt text is stored but is not identity evidence. Review candidates remain persisted, while
+Alt text and backstory are stored but are not identity evidence. Review candidates remain persisted, while
 `searchReady` becomes `true` only when at least one association is approved. Multiple faces are
 evaluated independently and repeated matches for the same celebrity are consolidated.
 
@@ -274,7 +275,7 @@ Save one or more editorial fields with:
 ```bash
 curl -X PATCH http://localhost:3000/api/assets/<asset-id>/metadata \
   -H 'Content-Type: application/json' \
-  -d '{"title":"Rihanna in Marc Jacobs","caption":"Rihanna arrives at the Met Gala"}'
+  -d '{"title":"Rihanna in Marc Jacobs","caption":"Rihanna arrives at the Met Gala","backstory":"Photographed shortly before the arrival."}'
 ```
 
 Every metadata save recalculates decisions from the stored recognition result without calling

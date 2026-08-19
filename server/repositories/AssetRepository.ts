@@ -29,6 +29,7 @@ export interface AssetRecord {
   };
   sourceText: {
     altText: string | null;
+    backstory: string | null;
     caption: string | null;
     revision: number;
     title: string | null;

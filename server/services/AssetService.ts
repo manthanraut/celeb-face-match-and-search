@@ -450,6 +450,7 @@ function createRecord(
     },
     sourceText: {
       altText: null,
+      backstory: null,
       caption: null,
       revision: 1,
       title: asset.title,
@@ -482,6 +483,7 @@ function toAsset(record: AssetRecord): Asset {
       title: record.sourceText.title,
       caption: record.sourceText.caption,
       altText: record.sourceText.altText,
+      backstory: record.sourceText.backstory,
       revision: record.sourceText.revision,
     },
     recognitionStatus: record.recognition.status,

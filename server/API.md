@@ -30,7 +30,7 @@ The server supports the backend workflow for celebrity image discovery:
 2. The server stores the image locally and creates an asset record in MongoDB.
 3. A background worker sends the image to Amazon Rekognition or the deterministic fake provider.
 4. The celebrity decision engine combines recognition confidence with editorial title and caption evidence.
-5. The CMS can update metadata without running recognition again.
+5. The CMS can update title, caption, alt text, and backstory without running recognition again.
 6. Gallery snapshots associate assets with publication state and canonical event/year context.
 7. Verso clients search by an exact celebrity name or alias and retrieve approved images from published galleries.
 
@@ -393,6 +393,7 @@ The following schemas are reused by multiple endpoints.
 | `sourceText.title` | string or `null`, max 500 | Editorial title. A title is initially derived from the filename. |
 | `sourceText.caption` | string or `null`, max 5,000 | Editorial caption. |
 | `sourceText.altText` | string or `null`, max 2,000 | Editorial alt text. It is not celebrity identity evidence. |
+| `sourceText.backstory` | string or `null`, max 5,000 | Editorial context or story behind the image. It is not celebrity identity evidence. |
 | `sourceText.revision` | positive integer | Incremented on every successful metadata update. |
 | `recognitionStatus` | recognition status | Current asynchronous recognition state. |
 | `searchReady` | boolean | `true` when current enrichment has at least one approved celebrity. Gallery publication is checked separately. |
@@ -503,6 +504,8 @@ Celebrity association:
 | `sourceText.title` | string or `null` | Current title. |
 | `sourceText.caption` | string or `null` | Current caption. |
 | `sourceText.altText` | string or `null` | Current alt text. |
+
+Backstory is private editorial context on the asset detail and is intentionally not included in search results.
 
 Celebrity object:
 
@@ -716,6 +719,7 @@ Example — `201 Created`:
         "title": "rihanna met gala",
         "caption": null,
         "altText": null,
+        "backstory": null,
         "revision": 1
       },
       "recognitionStatus": "QUEUED",
@@ -836,6 +840,7 @@ Success response — `200 OK`:
         "title": "Rihanna in Marc Jacobs",
         "caption": "Rihanna arrives at the Met Gala.",
         "altText": "Rihanna on the red carpet.",
+        "backstory": "Photographed shortly before the Met Gala arrival.",
         "revision": 2
       },
       "recognitionStatus": "SUCCEEDED",
@@ -898,6 +903,7 @@ Success response — `200 OK`: `AssetDetail`
     "title": "Rihanna in Marc Jacobs",
     "caption": "Rihanna arrives at the Met Gala.",
     "altText": "Rihanna on the red carpet.",
+    "backstory": "Photographed shortly before the Met Gala arrival.",
     "revision": 2
   },
   "recognitionStatus": "SUCCEEDED",
@@ -1153,6 +1159,7 @@ Request body:
 | `title` | string or `null` | At least one metadata field is required | Maximum 500 characters. |
 | `caption` | string or `null` | At least one metadata field is required | Maximum 5,000 characters. |
 | `altText` | string or `null` | At least one metadata field is required | Maximum 2,000 characters. |
+| `backstory` | string or `null` | At least one metadata field is required | Maximum 5,000 characters. |
 
 The body is strict: unknown fields return a validation error.
 
@@ -1162,7 +1169,7 @@ The body is strict: unknown fields return a validation error.
 - Empty/whitespace-only strings are stored as `null`.
 - Windows CRLF line endings are normalized to LF.
 - Every successful request increments `sourceText.revision`, even if the normalized content is unchanged.
-- Alt text is stored but does not count as celebrity corroboration.
+- Alt text and backstory are stored but do not count as celebrity corroboration.
 
 Example request:
 
@@ -1173,7 +1180,8 @@ curl -X PATCH \
   -d '{
     "title": "Rihanna in Marc Jacobs",
     "caption": "Rihanna arrives at the Met Gala.",
-    "altText": "Rihanna on the red carpet."
+    "altText": "Rihanna on the red carpet.",
+    "backstory": "Photographed shortly before the Met Gala arrival."
   }'
 ```
 
@@ -1189,6 +1197,7 @@ Success response — `200 OK`: the complete updated `AssetDetail`.
     "title": "Rihanna in Marc Jacobs",
     "caption": "Rihanna arrives at the Met Gala.",
     "altText": "Rihanna on the red carpet.",
+    "backstory": "Photographed shortly before the Met Gala arrival.",
     "revision": 2
   },
   "recognitionStatus": "SUCCEEDED",
@@ -1794,7 +1803,7 @@ The threshold defaults to 90 and is configurable through `RECOGNITION_APPROVAL_T
 
 Additional behavior:
 
-- Alt text never counts as evidence.
+- Alt text and backstory never count as evidence.
 - Multiple faces are evaluated independently.
 - Repeated matches for one identity are merged.
 - The highest confidence is retained.

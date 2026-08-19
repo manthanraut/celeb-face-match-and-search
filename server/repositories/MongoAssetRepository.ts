@@ -468,6 +468,10 @@ function toAssetRecord(document: WithId<AssetDocument>): AssetRecord {
   return {
     id: _id.toHexString(),
     ...asset,
+    sourceText: {
+      ...asset.sourceText,
+      backstory: asset.sourceText.backstory ?? null,
+    },
   };
 }
 

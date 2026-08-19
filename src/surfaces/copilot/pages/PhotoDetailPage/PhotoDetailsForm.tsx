@@ -1,9 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import type { PhotoEditData } from "../../../../features/assets/photoEditData";
+import {
+  MAX_ASSET_BACKSTORY_LENGTH,
+  type AssetDetail,
+} from "../../../../../shared/assets";
 
 interface PhotoDetailsFormProps {
-  photo: PhotoEditData;
+  asset: AssetDetail;
+}
+
+interface EditableMetadata {
+  altText: string;
+  backstory: string;
+  caption: string;
+  title: string;
 }
 
 const fieldStyles =
@@ -31,17 +41,36 @@ function SearchIcon() {
 
 function FormattingControls() {
   return (
-    <div aria-hidden="true" className="mb-1 flex justify-end gap-3 text-base">
+    <div aria-hidden="true" className="flex gap-3 text-base">
       <span className="grid size-9 place-items-center rounded-md bg-neutral-200 font-bold">≡</span>
       <span className="grid size-9 place-items-center font-mono text-sm font-bold">{"</>"}</span>
     </div>
   );
 }
 
-export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
-  const [altText, setAltText] = useState("Image may contain: Adult, Person, Clothing, and Glove");
-  const [title, setTitle] = useState(photo.name);
-  const wordCount = altText.trim() ? altText.trim().split(/\s+/).length : 0;
+function toEditableMetadata(asset: AssetDetail): EditableMetadata {
+  return {
+    altText: asset.sourceText.altText ?? "",
+    backstory: asset.sourceText.backstory ?? "",
+    caption: asset.sourceText.caption ?? "",
+    title: asset.sourceText.title ?? "",
+  };
+}
+
+export function PhotoDetailsForm({ asset }: PhotoDetailsFormProps) {
+  const [metadata, setMetadata] = useState<EditableMetadata>(() => toEditableMetadata(asset));
+  const altTextWordCount = metadata.altText.trim()
+    ? metadata.altText.trim().split(/\s+/).length
+    : 0;
+  const backstoryCharacterCount = metadata.backstory.length;
+
+  useEffect(() => {
+    setMetadata(toEditableMetadata(asset));
+  }, [asset.assetId]);
+
+  const updateField = (field: keyof EditableMetadata, value: string) => {
+    setMetadata((current) => ({ ...current, [field]: value }));
+  };
 
   return (
     <form className="min-w-0" onSubmit={(event) => event.preventDefault()}>
@@ -54,10 +83,11 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
             autoComplete="off"
             className={`${fieldStyles} pr-12`}
             id="photo-title"
+            maxLength={500}
             name="title"
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={(event) => updateField("title", event.target.value)}
             type="text"
-            value={title}
+            value={metadata.title}
           />
           <MagicIcon />
         </div>
@@ -72,31 +102,41 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
             autoComplete="off"
             className={`${fieldStyles} pr-12`}
             id="photo-alt-text"
+            maxLength={2_000}
             name="altText"
-            onChange={(event) => setAltText(event.target.value)}
+            onChange={(event) => updateField("altText", event.target.value)}
             type="text"
-            value={altText}
+            value={metadata.altText}
           />
           <MagicIcon />
         </div>
         <div className="flex flex-wrap justify-between gap-2 pt-1 text-sm">
-          <p className="text-[#6233cc]">Alt text has been automatically generated</p>
+          <p className="text-[#6233cc]">
+            {metadata.altText
+              ? "Alt text is available for editorial review"
+              : "Add descriptive alt text"}
+          </p>
           <p className="tabular-nums text-neutral-600">
-            {wordCount} {wordCount === 1 ? "word" : "words"}
+            {altTextWordCount} {altTextWordCount === 1 ? "word" : "words"}
           </p>
         </div>
       </div>
 
       <div className="mt-6">
-        <label className="mb-1.5 block text-base font-bold" htmlFor="global-caption">
-          Global Caption
-        </label>
-        <FormattingControls />
+        <div className="mb-1.5 flex items-center justify-between gap-3">
+          <label className="text-base font-bold" htmlFor="global-caption">
+            Global Caption
+          </label>
+          <FormattingControls />
+        </div>
         <textarea
           autoComplete="off"
           className={`${fieldStyles} min-h-16 resize-y`}
           id="global-caption"
-          name="globalCaption"
+          maxLength={5_000}
+          name="caption"
+          onChange={(event) => updateField("caption", event.target.value)}
+          value={metadata.caption}
         />
       </div>
 
@@ -128,10 +168,12 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
       </fieldset>
 
       <div className="mt-4">
-        <label className="mb-1.5 block text-base font-bold" htmlFor="photo-credit">
-          Credit
-        </label>
-        <FormattingControls />
+        <div className="mb-1.5 flex items-center justify-between gap-3">
+          <label className="text-base font-bold" htmlFor="photo-credit">
+            Credit
+          </label>
+          <FormattingControls />
+        </div>
         <input autoComplete="off" className={fieldStyles} id="photo-credit" name="credit" type="text" />
       </div>
 
@@ -146,6 +188,30 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
           name="internalNotes"
         />
       </div>
+
+      <div className="mt-4">
+        <label className="mb-1.5 block text-base font-bold" htmlFor="photo-backstory">
+          Backstory
+        </label>
+        <textarea
+          aria-describedby="photo-backstory-count"
+          autoComplete="off"
+          className={`${fieldStyles} min-h-28 resize-y`}
+          id="photo-backstory"
+          maxLength={MAX_ASSET_BACKSTORY_LENGTH}
+          name="backstory"
+          onChange={(event) => updateField("backstory", event.target.value)}
+          placeholder="Add editorial context or the story behind this image."
+          value={metadata.backstory}
+        />
+        <p
+          className="pt-1 text-right text-sm tabular-nums text-neutral-600"
+          id="photo-backstory-count"
+        >
+          {backstoryCharacterCount}/{MAX_ASSET_BACKSTORY_LENGTH} characters
+        </p>
+      </div>
+
     </form>
   );
 }

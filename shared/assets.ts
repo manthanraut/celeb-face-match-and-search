@@ -9,6 +9,7 @@ export const MAX_ASSET_UPLOAD_FILES = 10;
 export const MAX_ASSET_UPLOAD_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 export const MAX_ASSET_IMAGE_DIMENSION = 10_000;
 export const MAX_ASSET_IMAGE_PIXELS = 50_000_000;
+export const MAX_ASSET_BACKSTORY_LENGTH = 5_000;
 
 export const assetIdSchema = z.string().regex(/^[a-f\d]{24}$/i, "Asset ID must be a 24-character hexadecimal value.");
 export const clientAssetIdSchema = z.string().uuid();
@@ -25,6 +26,7 @@ export const assetSourceTextSchema = z.object({
   title: z.string().max(500).nullable(),
   caption: z.string().max(5_000).nullable(),
   altText: z.string().max(2_000).nullable(),
+  backstory: z.string().max(MAX_ASSET_BACKSTORY_LENGTH).nullable(),
   revision: z.number().int().positive(),
 });
 
@@ -93,6 +95,7 @@ export const assetMetadataUpdateSchema = z
     title: z.string().max(500).nullable().optional(),
     caption: z.string().max(5_000).nullable().optional(),
     altText: z.string().max(2_000).nullable().optional(),
+    backstory: z.string().max(MAX_ASSET_BACKSTORY_LENGTH).nullable().optional(),
   })
   .strict()
   .refine(

@@ -519,6 +519,19 @@ describeWithMongo("MongoDB foundation", () => {
     await expect(assets!.findByClientAssetIds([])).resolves.toEqual(new Map());
   });
 
+  it("normalizes backstory to null for assets created before the field existed", async () => {
+    const input = createAsset();
+    const { backstory: _backstory, ...legacySourceText } = input.sourceText;
+    const result = await database!.collection(collectionNames.assets).insertOne({
+      ...input,
+      sourceText: legacySourceText,
+    });
+
+    await expect(assets!.findById(result.insertedId.toHexString())).resolves.toMatchObject({
+      sourceText: { backstory: null },
+    });
+  });
+
   it("translates only duplicate client asset IDs to the repository error", async () => {
     const clientAssetId = randomUUID();
     await assets!.insert(
@@ -920,6 +933,7 @@ function createAsset(
     },
     sourceText: {
       altText: "A celebrity arriving at the gala",
+      backstory: null,
       caption: "Arrival on the Met Gala carpet",
       revision: 1,
       title: "Met Gala arrival",

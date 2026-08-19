@@ -58,7 +58,12 @@ function face(
 
 function evaluate(
   result: RecognitionResult | null,
-  sourceText: { altText?: string | null; caption?: string | null; title?: string | null } = {},
+  sourceText: {
+    altText?: string | null;
+    backstory?: string | null;
+    caption?: string | null;
+    title?: string | null;
+  } = {},
 ) {
   return evaluateCelebrityDecisions({
     approvalThreshold: 90,
@@ -66,6 +71,7 @@ function evaluate(
     recognitionResult: result,
     sourceText: {
       altText: sourceText.altText ?? null,
+      backstory: sourceText.backstory ?? null,
       caption: sourceText.caption ?? null,
       title: sourceText.title ?? null,
     },
@@ -128,6 +134,21 @@ describe("celebrity decision engine v1", () => {
       decision: "NEEDS_REVIEW",
       evidenceFields: [],
     });
+  });
+
+  it("ignores backstory as identity evidence and for metadata-only inference", () => {
+    const recognitionMatch = evaluate(recognitionResult([face("Rihanna", 50.4)]), {
+      backstory: "Rihanna in Marc Jacobs before the Met Gala",
+    });
+    const metadataOnly = evaluate(recognitionResult([]), {
+      backstory: "Rihanna in Marc Jacobs before the Met Gala",
+    });
+
+    expect(recognitionMatch.associations[0]).toMatchObject({
+      decision: "NEEDS_REVIEW",
+      evidenceFields: [],
+    });
+    expect(metadataOnly.associations).toEqual([]);
   });
 
   it("uses canonical catalog identity and aliases for corroboration", () => {

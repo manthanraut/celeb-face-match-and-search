@@ -1,4 +1,5 @@
 export interface SelectedPhoto {
+  assetId: string | null;
   file: File;
   height: number;
   id: string;
@@ -44,6 +45,7 @@ export async function createSelectedPhoto(file: File): Promise<SelectedPhoto> {
     const dimensions = await readImageDimensions(previewUrl);
 
     return {
+      assetId: null,
       file,
       height: dimensions.height,
       id: crypto.randomUUID(),
@@ -70,7 +72,7 @@ export function createPhotoEditUrl(photo: SelectedPhoto) {
     width: String(photo.width),
   });
 
-  return `/admin/photos/${photo.id}?${searchParams.toString()}`;
+  return `/admin/photos/${photo.assetId ?? photo.id}?${searchParams.toString()}`;
 }
 
 export function formatFileSize(bytes: number) {

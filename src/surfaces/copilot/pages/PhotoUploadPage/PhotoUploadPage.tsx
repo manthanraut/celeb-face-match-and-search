@@ -5,10 +5,12 @@ import {
   createSelectedPhoto,
   type SelectedPhoto,
 } from "../../../../features/assets/photoSelection";
+import { uploadAssets } from "../../../../features/assets/assetApi";
+import { MAX_ASSET_UPLOAD_FILES } from "../../../../../shared/assets";
 
 import { SelectedPhotoCard } from "./SelectedPhotoCard";
 
-const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
 
 function UploadIcon() {
   return (
@@ -25,6 +27,50 @@ export function PhotoUploadPage() {
   const [selectedPhotos, setSelectedPhotos] = useState<SelectedPhoto[]>([]);
   const objectUrlsRef = useRef(new Set<string>());
   const selectedSignaturesRef = useRef(new Set<string>());
+
+  const persistPhotos = useCallback(
+    async (photos: readonly SelectedPhoto[], successMessage: string) => {
+      if (photos.length === 0) {
+        return;
+      }
+
+      setIsPreparing(true);
+      setMessage(`Uploading ${photos.length} ${photos.length === 1 ? "image" : "images"}…`);
+
+      try {
+        for (let offset = 0; offset < photos.length; offset += MAX_ASSET_UPLOAD_FILES) {
+          const batch = photos.slice(offset, offset + MAX_ASSET_UPLOAD_FILES);
+          const response = await uploadAssets(
+            batch.map((photo) => ({
+              clientAssetId: photo.id,
+              file: photo.file,
+            })),
+          );
+          if (response.assets.length !== batch.length) {
+            throw new Error("The server returned an incomplete upload response.");
+          }
+
+          const assetIds = new Map(
+            batch.map((photo, index) => [photo.id, response.assets[index].assetId]),
+          );
+          setSelectedPhotos((currentPhotos) =>
+            currentPhotos.map((photo) => {
+              const assetId = assetIds.get(photo.id);
+              return assetId ? { ...photo, assetId } : photo;
+            }),
+          );
+        }
+
+        setMessage(`${successMessage} Uploaded to the server.`);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : "The upload failed.";
+        setMessage(`${detail} Use Retry Pending Uploads to try again.`);
+      } finally {
+        setIsPreparing(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const objectUrls = objectUrlsRef.current;
@@ -59,7 +105,7 @@ export function PhotoUploadPage() {
 
     if (acceptedFiles.length === 0) {
       if (invalidCount > 0) {
-        setMessage("Select JPG, PNG, or WebP image files.");
+        setMessage("Select JPG or PNG image files.");
       } else if (duplicateCount > 0) {
         setMessage("Those images are already selected.");
       }
@@ -84,7 +130,6 @@ export function PhotoUploadPage() {
     const validPhotos = preparedPhotos.filter((photo): photo is SelectedPhoto => photo !== null);
     validPhotos.forEach((photo) => objectUrlsRef.current.add(photo.previewUrl));
     setSelectedPhotos((currentPhotos) => [...currentPhotos, ...validPhotos]);
-    setIsPreparing(false);
 
     const messageParts = [`${validPhotos.length} ${validPhotos.length === 1 ? "image" : "images"} selected.`];
     if (duplicateCount > 0) {
@@ -93,8 +138,13 @@ export function PhotoUploadPage() {
     if (invalidCount > 0) {
       messageParts.push(`${invalidCount} unsupported ${invalidCount === 1 ? "file was" : "files were"} skipped.`);
     }
-    setMessage(messageParts.join(" "));
-  }, []);
+    if (validPhotos.length === 0) {
+      setIsPreparing(false);
+      setMessage(messageParts.join(" "));
+      return;
+    }
+    await persistPhotos(validPhotos, messageParts.join(" "));
+  }, [persistPhotos]);
 
   const handleFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -111,6 +161,8 @@ export function PhotoUploadPage() {
     URL.revokeObjectURL(photo.previewUrl);
     setMessage(`${photo.name} removed. You can select it again.`);
   }, []);
+
+  const pendingPhotos = selectedPhotos.filter((photo) => photo.assetId === null);
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -147,7 +199,7 @@ export function PhotoUploadPage() {
           <div className="text-center">
             <p className="text-lg font-bold">Drag files here</p>
             <input
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png"
               className="peer sr-only"
               disabled={isPreparing}
               id="photo-file-input"
@@ -163,7 +215,7 @@ export function PhotoUploadPage() {
               <UploadIcon />
               {isPreparing ? "Preparing…" : "Upload"}
             </label>
-            <p className="mt-3 text-xs text-neutral-500">JPG, PNG, or WebP · Select one or multiple images</p>
+            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Select one or multiple images</p>
           </div>
         </div>
 
@@ -176,9 +228,30 @@ export function PhotoUploadPage() {
             <h2 className="sr-only" id="selected-photos-title">
               Selected Photos
             </h2>
+            {pendingPhotos.length > 0 && !isPreparing ? (
+              <button
+                className="mb-4 inline-flex min-h-11 items-center justify-center rounded-md border border-[#2948b8] px-4 py-2 text-sm font-bold text-[#2948b8] hover:bg-[#eef1ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8]"
+                onClick={() =>
+                  void persistPhotos(
+                    pendingPhotos,
+                    `${pendingPhotos.length} pending ${
+                      pendingPhotos.length === 1 ? "image" : "images"
+                    } selected.`,
+                  )
+                }
+                type="button"
+              >
+                Retry Pending Uploads
+              </button>
+            ) : null}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {selectedPhotos.map((photo) => (
-                <SelectedPhotoCard key={photo.id} onRemove={handleRemovePhoto} photo={photo} />
+                <SelectedPhotoCard
+                  isUploading={isPreparing}
+                  key={photo.id}
+                  onRemove={handleRemovePhoto}
+                  photo={photo}
+                />
               ))}
             </div>
           </section>

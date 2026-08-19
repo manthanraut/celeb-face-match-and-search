@@ -30,6 +30,7 @@ describe("photo selection utilities", () => {
       type: "image/jpeg",
     });
     const photo: SelectedPhoto = {
+      assetId: "64b000000000000000000001",
       file,
       height: 2160,
       id: "photo-123",
@@ -42,7 +43,7 @@ describe("photo selection utilities", () => {
 
     const editUrl = new URL(createPhotoEditUrl(photo), "http://localhost");
 
-    expect(editUrl.pathname).toBe("/admin/photos/photo-123");
+    expect(editUrl.pathname).toBe("/admin/photos/64b000000000000000000001");
     expect(editUrl.searchParams.get("name")).toBe("red carpet.jpg");
     expect(editUrl.searchParams.get("previewUrl")).toBe("blob:http://localhost/photo-123");
     expect(editUrl.searchParams.get("width")).toBe("3840");
