@@ -540,6 +540,7 @@ interface GalleryEvent {
 | `GET` | `/api/assets/:assetId/image` | Retrieve stored image bytes. |
 | `POST` | `/api/assets/:assetId/recognition/retry` | Requeue failed or indeterminate recognition. |
 | `PATCH` | `/api/assets/:assetId/metadata` | Update editorial metadata and recalculate decisions. |
+| `GET` | `/api/galleries/assets/:assetId/event-metadata` | Retrieve the image's latest persisted content event. |
 | `PUT` | `/api/galleries/:galleryId/context` | Synchronize the complete gallery snapshot. |
 | `DELETE` | `/api/galleries/:galleryId/assets/:assetId` | Remove one asset/gallery association. |
 | `GET` | `/api/search` | Resolve a celebrity name or alias and search published images. |
@@ -1297,6 +1298,52 @@ Metadata can be updated while recognition is still queued or processing, but cel
 
 ## Gallery APIs
 
+### Get asset event metadata
+
+Returns the most recently updated event context associated with an image through a content usage. This is the persisted value displayed by the Copilot **Event Metadata** section after a page refresh.
+
+| Property | Value |
+| --- | --- |
+| Method | `GET` |
+| Path | `/api/galleries/assets/:assetId/event-metadata` |
+| Authentication | None |
+| Required headers | None |
+| Query/body | None |
+
+Path parameters:
+
+| Name | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `assetId` | string | Yes | 24 hexadecimal characters. |
+
+Example:
+
+```bash
+curl http://localhost:3000/api/galleries/assets/64b000000000000000000001/event-metadata
+```
+
+Success response — `200 OK`:
+
+```json
+{
+  "event": {
+    "id": "met-gala",
+    "name": "Met Gala",
+    "year": 2026
+  }
+}
+```
+
+`event` is `null` when the asset exists but has no usage with resolved event metadata. If multiple content usages contain events, the usage with the latest `updatedAt` value is returned; gallery ID provides a deterministic tie-breaker.
+
+Errors:
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | `VALIDATION_ERROR` | Invalid asset ID. |
+| `404` | `ASSET_NOT_FOUND` | Asset does not exist. |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected MongoDB failure. |
+
 ### Synchronize gallery context
 
 Replaces the server's complete view of a gallery's current assets, publication state, and tags.
@@ -1378,7 +1425,7 @@ A canonical event is resolved only when one tag contains both a supported event 
 | `Met Gala` | `met-gala` | `Met Gala` |
 | `Grammy`, `Grammys`, or `Grammy Awards` | `grammys` | `Grammys` |
 | `Oscar`, `Oscars`, or `Academy Awards` | `oscars` | `Oscars` |
-| `Golden Globe` or `Golden Globes` | `golden-globes` | `Golden Globes` |
+| `Golden Globe` or `Golden Globes` | `golden-globes` | `Golden Globe` |
 | `Vogue World` | `vogue-world` | `Vogue World` |
 
 Matching is case-insensitive, accent-insensitive, and tolerant of punctuation separators.
@@ -1398,6 +1445,8 @@ Matching is case-insensitive, accent-insensitive, and tolerant of punctuation se
 - Asset existence is checked before any gallery changes.
 - Context updates do not run or requeue recognition.
 - Requests for the same gallery are serialized within one server process.
+
+The Copilot prototype's **Image gets added in content** button waits two seconds, randomly chooses one of `Met Gala`, `Oscars`, `Vogue World`, or `Golden Globe` and one of `2026`, `2025`, `2024`, or `2023`, then synchronizes a published gallery named `copilot-photo-<assetId>`. The resulting usage is immediately eligible for the existing `event` and `year` search filters when the celebrity association is otherwise searchable.
 
 Errors:
 

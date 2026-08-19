@@ -261,6 +261,11 @@ describeWithMongo("MongoDB foundation", () => {
     });
     expect(inserted).toMatchObject({ addedAt: updatedAt });
     await expect(assets!.findById(first.id)).resolves.toEqual(first);
+    await expect(galleryUsages!.findLatestEventContext(first.id)).resolves.toEqual({
+      id: "oscars",
+      name: "Oscars",
+      year: 2027,
+    });
 
     await expect(galleryUsages!.removeAsset("gallery-1", first.id)).resolves.toBe(true);
     await expect(galleryUsages!.removeAsset("gallery-1", first.id)).resolves.toBe(false);

@@ -10,6 +10,9 @@ const ASSET_ID = "64b000000000000000000001";
 
 function createGalleryService(overrides: Partial<GalleryRouteService> = {}): GalleryRouteService {
   return {
+    getAssetEventMetadata: vi.fn(async () => ({
+      event: { id: "met-gala" as const, name: "Met Gala", year: 2026 },
+    })),
     removeAsset: vi.fn(async (galleryId, assetId) => ({
       assetId,
       galleryId,
@@ -38,6 +41,25 @@ async function startGalleryApi(galleryService: GalleryRouteService) {
 }
 
 describe("gallery API", () => {
+  it("returns the latest persisted event metadata for an asset", async () => {
+    const galleryService = createGalleryService();
+    const testServer = await startGalleryApi(galleryService);
+
+    try {
+      const response = await fetch(
+        `${testServer.baseUrl}/api/galleries/assets/${ASSET_ID}/event-metadata`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        event: { id: "met-gala", name: "Met Gala", year: 2026 },
+      });
+      expect(galleryService.getAssetEventMetadata).toHaveBeenCalledWith(ASSET_ID);
+    } finally {
+      await testServer.close();
+    }
+  });
+
   it("syncs a complete gallery context snapshot", async () => {
     const galleryService = createGalleryService();
     const testServer = await startGalleryApi(galleryService);

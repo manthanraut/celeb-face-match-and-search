@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getPhotoAsset, updatePhotoMetadata, uploadPhotoAssets } from "./api";
+import {
+  addPhotoToContent,
+  getPhotoAsset,
+  getPhotoEventMetadata,
+  updatePhotoMetadata,
+  uploadPhotoAssets,
+} from "./api";
 
 const assetSummary = {
   assetId: "64b000000000000000000001",
@@ -30,6 +36,46 @@ afterEach(() => {
 });
 
 describe("asset API client", () => {
+  it("loads and updates persisted event metadata through gallery usage APIs", async () => {
+    const event = { id: "met-gala", name: "Met Gala", year: 2026 };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({ event }),
+        { headers: { "Content-Type": "application/json" }, status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({
+          assetCount: 1,
+          event,
+          galleryId: `copilot-photo-${assetSummary.assetId}`,
+          published: true,
+        }),
+        { headers: { "Content-Type": "application/json" }, status: 200 },
+      ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getPhotoEventMetadata(assetSummary.assetId)).resolves.toEqual({ event });
+    await expect(addPhotoToContent(assetSummary.assetId, "Met Gala", 2026))
+      .resolves.toEqual({ event });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      `/api/galleries/assets/${assetSummary.assetId}/event-metadata`,
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      `/api/galleries/copilot-photo-${assetSummary.assetId}/context`,
+      expect.objectContaining({
+        body: JSON.stringify({
+          assetIds: [assetSummary.assetId],
+          published: true,
+          tags: ["Met Gala 2026"],
+        }),
+        method: "PUT",
+      }),
+    );
+  });
+
   it("uploads images using PR #2 multipart fields and manifest order", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(
       JSON.stringify({ assets: [assetSummary] }),

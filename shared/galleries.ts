@@ -14,7 +14,7 @@ export const canonicalEventIdSchema = z.enum(canonicalEventIds);
 export type CanonicalEventId = z.infer<typeof canonicalEventIdSchema>;
 
 export const canonicalEventNames: Readonly<Record<CanonicalEventId, string>> = {
-  "golden-globes": "Golden Globes",
+  "golden-globes": "Golden Globe",
   grammys: "Grammys",
   "met-gala": "Met Gala",
   oscars: "Oscars",
@@ -64,6 +64,10 @@ export const galleryContextResponseSchema = z.object({
   published: z.boolean(),
 });
 
+export const assetEventMetadataResponseSchema = z.object({
+  event: galleryEventContextSchema.nullable(),
+});
+
 export const galleryAssetRemovalResponseSchema = z.object({
   assetId: assetIdSchema,
   galleryId: galleryIdSchema,
@@ -73,4 +77,5 @@ export const galleryAssetRemovalResponseSchema = z.object({
 export type GalleryContextUpdate = z.infer<typeof galleryContextUpdateSchema>;
 export type GalleryContextResponse = z.infer<typeof galleryContextResponseSchema>;
 export type GalleryEventContext = z.infer<typeof galleryEventContextSchema>;
+export type AssetEventMetadataResponse = z.infer<typeof assetEventMetadataResponseSchema>;
 export type GalleryAssetRemovalResponse = z.infer<typeof galleryAssetRemovalResponseSchema>;

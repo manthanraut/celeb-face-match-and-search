@@ -6,6 +6,11 @@ import {
   type AssetMetadataUpdate,
   type AssetUploadResult,
 } from "./contracts";
+import {
+  assetEventMetadataResponseSchema,
+  galleryContextResponseSchema,
+  type AssetEventMetadataResponse,
+} from "../../../shared/galleries";
 
 export interface UploadPhotoAssetInput {
   clientAssetId: string;
@@ -38,6 +43,39 @@ async function parseAssetDetail(response: Response): Promise<AssetDetail> {
 
 export async function getPhotoAsset(assetId: string): Promise<AssetDetail> {
   return parseAssetDetail(await fetch(`/api/assets/${assetId}`));
+}
+
+export async function getPhotoEventMetadata(
+  assetId: string,
+): Promise<AssetEventMetadataResponse> {
+  const response = await fetch(`/api/galleries/assets/${assetId}/event-metadata`);
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+
+  return assetEventMetadataResponseSchema.parse(await response.json());
+}
+
+export async function addPhotoToContent(
+  assetId: string,
+  eventName: string,
+  year: number,
+): Promise<AssetEventMetadataResponse> {
+  const response = await fetch(`/api/galleries/copilot-photo-${assetId}/context`, {
+    body: JSON.stringify({
+      assetIds: [assetId],
+      published: true,
+      tags: [`${eventName} ${year}`],
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "PUT",
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response));
+  }
+
+  const result = galleryContextResponseSchema.parse(await response.json());
+  return assetEventMetadataResponseSchema.parse({ event: result.event });
 }
 
 export async function uploadPhotoAssets(

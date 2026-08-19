@@ -3,7 +3,9 @@ import { useParams } from "react-router-dom";
 
 import { createPhotoEditData, formatLastModified } from "../../../../features/assets/photoEditData";
 import {
+  useAddPhotoToContent,
   usePhotoAsset,
+  usePhotoEventMetadata,
   usePhotoImageDimensions,
   useUpdatePhotoMetadata,
 } from "../../../../features/assets/hooks";
@@ -32,7 +34,9 @@ export function PhotoDetailPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [hideFromSearchDraft, setHideFromSearchDraft] = useState<boolean | null>(null);
   const assetQuery = usePhotoAsset(assetId);
+  const eventMetadataQuery = usePhotoEventMetadata(assetId);
   const dimensionsQuery = usePhotoImageDimensions(assetQuery.data?.links.image);
+  const addToContentMutation = useAddPhotoToContent(assetId);
   const metadataMutation = useUpdatePhotoMetadata(assetId);
 
   useEffect(() => {
@@ -116,8 +120,19 @@ export function PhotoDetailPage() {
 
         <AiDiscoveryMetadataSection
           asset={asset}
+          eventMetadata={eventMetadataQuery.data?.event ?? null}
+          eventMetadataError={
+            eventMetadataQuery.error instanceof Error
+              ? eventMetadataQuery.error.message
+              : addToContentMutation.error instanceof Error
+                ? addToContentMutation.error.message
+                : null
+          }
           hideFromSearch={hideFromSearch}
+          isAddingToContent={addToContentMutation.isPending}
+          isEventMetadataLoading={eventMetadataQuery.isPending}
           isSaving={metadataMutation.isPending}
+          onAddToContent={() => addToContentMutation.mutate()}
           onHideFromSearchChange={(checked) => {
             setHideFromSearchDraft(checked);
             setHasUnsavedChanges(true);

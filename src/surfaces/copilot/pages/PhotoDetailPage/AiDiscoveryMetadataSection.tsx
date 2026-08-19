@@ -1,9 +1,15 @@
 import type { AssetDetail } from "../../../../features/assets/contracts";
+import type { GalleryEventContext } from "../../../../../shared/galleries";
 
 interface AiDiscoveryMetadataSectionProps {
   asset: AssetDetail;
+  eventMetadata: GalleryEventContext | null;
+  eventMetadataError: string | null;
   hideFromSearch: boolean;
+  isAddingToContent: boolean;
+  isEventMetadataLoading: boolean;
   isSaving: boolean;
+  onAddToContent: () => void;
   onHideFromSearchChange: (checked: boolean) => void;
 }
 
@@ -131,8 +137,13 @@ function RecognitionLoadingSkeleton() {
 
 export function AiDiscoveryMetadataSection({
   asset,
+  eventMetadata,
+  eventMetadataError,
   hideFromSearch,
+  isAddingToContent,
+  isEventMetadataLoading,
   isSaving,
+  onAddToContent,
   onHideFromSearchChange,
 }: AiDiscoveryMetadataSectionProps) {
   const isRecognitionActive = asset.recognition.status === "QUEUED"
@@ -313,17 +324,40 @@ export function AiDiscoveryMetadataSection({
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <section className="rounded-md border border-neutral-300 p-4" aria-labelledby="event-metadata-title">
-            <h3 className="text-sm font-bold" id="event-metadata-title">Event Metadata</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-bold" id="event-metadata-title">Event Metadata</h3>
+              <button
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[#2948b8] px-3 py-2 text-xs font-bold text-[#2948b8] hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8] disabled:cursor-not-allowed disabled:border-neutral-300 disabled:text-neutral-500"
+                disabled={isAddingToContent}
+                onClick={onAddToContent}
+                type="button"
+              >
+                {isAddingToContent ? (
+                  <span
+                    aria-hidden="true"
+                    className="size-4 animate-spin rounded-full border-2 border-neutral-300 border-t-[#2948b8] motion-reduce:animate-none"
+                  />
+                ) : null}
+                {isAddingToContent ? "Adding image…" : "Image gets added in content"}
+              </button>
+            </div>
             <dl className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="rounded-sm border border-neutral-300 p-3">
                 <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Event</dt>
-                <dd className="mt-1 text-sm font-bold">Not yet associated</dd>
+                <dd className="mt-1 text-sm font-bold">
+                  {isEventMetadataLoading ? "Loading…" : eventMetadata?.name ?? "Not yet associated"}
+                </dd>
               </div>
               <div className="rounded-sm border border-neutral-300 p-3">
                 <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Event Year</dt>
-                <dd className="mt-1 text-sm font-bold tabular-nums">—</dd>
+                <dd className="mt-1 text-sm font-bold tabular-nums">
+                  {isEventMetadataLoading ? "Loading…" : eventMetadata?.year ?? "—"}
+                </dd>
               </div>
             </dl>
+            {eventMetadataError ? (
+              <p className="mt-3 text-xs text-red-700" role="alert">{eventMetadataError}</p>
+            ) : null}
           </section>
 
           <section className="rounded-md border border-neutral-300 p-4" aria-labelledby="designer-associations-title">
