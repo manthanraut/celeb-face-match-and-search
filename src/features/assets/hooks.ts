@@ -4,6 +4,7 @@ import type { GalleryEventContext } from "../../../shared/galleries";
 import type { AssetDetail, AssetMetadataUpdate } from "./contracts";
 import { getPhotoAsset, getPhotoEventMetadata, savePhotoChanges } from "./api";
 import { readImageDimensions } from "./photoSelection";
+import { searchQueryKeys } from "../search/queryKeys";
 
 function assetQueryKey(assetId: string) {
   return ["photo-asset", assetId] as const;
@@ -64,11 +65,12 @@ export function useSavePhoto(assetId: string) {
       eventMetadata: GalleryEventContext | null;
       sourceText: AssetMetadataUpdate;
     }) => savePhotoChanges(assetId, sourceText, eventMetadata),
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       queryClient.setQueryData(assetQueryKey(assetId), result.asset);
       if (result.eventMetadata) {
         queryClient.setQueryData(eventMetadataQueryKey(assetId), result.eventMetadata);
       }
+      await queryClient.invalidateQueries({ queryKey: searchQueryKeys.all });
     },
   });
 }

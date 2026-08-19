@@ -12,22 +12,9 @@ import {
   SearchApiError,
   type CelebritySearchRequest,
 } from "./api";
+import { searchQueryKeys } from "./queryKeys";
 
 type CelebritySearchFilters = Omit<CelebritySearchRequest, "cursor">;
-
-export const searchQueryKeys = {
-  all: ["verso-search"] as const,
-  celebrity: (filters: CelebritySearchFilters) => [
-    ...searchQueryKeys.all,
-    "celebrity",
-    filters,
-  ] as const,
-  discoveryHub: (limit: number) => [
-    ...searchQueryKeys.all,
-    "discovery-hub",
-    limit,
-  ] as const,
-};
 
 function shouldRetry(failureCount: number, error: Error) {
   if (error instanceof SearchApiError && error.status < 500) return false;
