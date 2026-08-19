@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 
-import type { SourceText, UpdateSourceTextInput } from "../../../../features/assets/contracts";
+import type {
+  AssetMetadataUpdate,
+  AssetSourceText,
+} from "../../../../features/assets/contracts";
 import type { PhotoEditData } from "../../../../features/assets/photoEditData";
 
 interface PhotoDetailsFormProps {
   formId: string;
   isSaved: boolean;
   onDirtyChange: (isDirty: boolean) => void;
-  onSave: (sourceText: UpdateSourceTextInput) => void;
+  onSave: (sourceText: AssetMetadataUpdate) => void;
   photo: PhotoEditData;
-  sourceText: SourceText;
+  sourceText: AssetSourceText;
 }
 
 const fieldStyles =
@@ -82,6 +85,7 @@ export function PhotoDetailsForm({
             className={`${fieldStyles} pr-12`}
             id="photo-title"
             name="title"
+            maxLength={500}
             onChange={(event) => {
               setTitle(event.target.value);
               onDirtyChange(true);
@@ -103,6 +107,7 @@ export function PhotoDetailsForm({
             className={`${fieldStyles} pr-12`}
             id="photo-alt-text"
             name="altText"
+            maxLength={2_000}
             onChange={(event) => {
               setAltText(event.target.value);
               onDirtyChange(true);
@@ -131,6 +136,7 @@ export function PhotoDetailsForm({
           className={`${fieldStyles} min-h-16 resize-y`}
           id="global-caption"
           name="globalCaption"
+          maxLength={5_000}
           onChange={(event) => {
             setCaption(event.target.value);
             onDirtyChange(true);

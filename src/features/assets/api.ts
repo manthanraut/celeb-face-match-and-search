@@ -1,47 +1,58 @@
 import {
-  photoAssetResponseSchema,
-  type PhotoAsset,
-  type PhotoAssetResponse,
-  type UpdateSourceTextInput,
+  assetDetailSchema,
+  assetMetadataUpdateSchema,
+  assetUploadResponseSchema,
+  type AssetDetail,
+  type AssetMetadataUpdate,
+  type AssetUploadResult,
 } from "./contracts";
 
-interface UploadPhotoAssetInput {
+export interface UploadPhotoAssetInput {
+  clientAssetId: string;
   file: File;
-  height: number;
-  width: number;
+}
+
+interface ApiErrorEnvelope {
+  error?: {
+    code?: string;
+    message?: string;
+  };
 }
 
 async function readError(response: Response) {
   try {
-    const body = await response.json() as { error?: string };
-    return body.error ?? `Request failed with status ${response.status}.`;
+    const body = await response.json() as ApiErrorEnvelope;
+    return body.error?.message ?? `Request failed with status ${response.status}.`;
   } catch {
     return `Request failed with status ${response.status}.`;
   }
 }
 
-async function parseAssetResponse(response: Response) {
+async function parseAssetDetail(response: Response): Promise<AssetDetail> {
   if (!response.ok) {
     throw new Error(await readError(response));
   }
 
-  return photoAssetResponseSchema.parse(await response.json());
+  return assetDetailSchema.parse(await response.json());
 }
 
-export async function getPhotoAsset(assetId: string) {
-  return parseAssetResponse(await fetch(`/api/assets/${assetId}`));
+export async function getPhotoAsset(assetId: string): Promise<AssetDetail> {
+  return parseAssetDetail(await fetch(`/api/assets/${assetId}`));
 }
 
-export async function uploadPhotoAsset(input: UploadPhotoAssetInput): Promise<PhotoAsset> {
+export async function uploadPhotoAssets(
+  inputs: readonly UploadPhotoAssetInput[],
+): Promise<AssetUploadResult[]> {
+  const formData = new FormData();
+  const manifest = inputs.map(({ clientAssetId, file }) => {
+    formData.append("images", file, file.name);
+    return { clientAssetId };
+  });
+
+  formData.append("manifest", JSON.stringify(manifest));
+
   const response = await fetch("/api/assets", {
-    body: input.file,
-    headers: {
-      "Content-Type": input.file.type,
-      "X-File-Last-Modified": String(input.file.lastModified),
-      "X-File-Name": encodeURIComponent(input.file.name),
-      "X-Image-Height": String(input.height),
-      "X-Image-Width": String(input.width),
-    },
+    body: formData,
     method: "POST",
   });
 
@@ -49,16 +60,17 @@ export async function uploadPhotoAsset(input: UploadPhotoAssetInput): Promise<Ph
     throw new Error(await readError(response));
   }
 
-  const body = await response.json() as { asset: unknown };
-  return photoAssetResponseSchema.shape.asset.parse(body.asset);
+  return assetUploadResponseSchema.parse(await response.json()).assets;
 }
 
 export async function updatePhotoMetadata(
   assetId: string,
-  sourceText: UpdateSourceTextInput,
-): Promise<PhotoAssetResponse> {
-  return parseAssetResponse(await fetch(`/api/assets/${assetId}/metadata`, {
-    body: JSON.stringify(sourceText),
+  sourceText: AssetMetadataUpdate,
+): Promise<AssetDetail> {
+  const metadata = assetMetadataUpdateSchema.parse(sourceText);
+
+  return parseAssetDetail(await fetch(`/api/assets/${assetId}/metadata`, {
+    body: JSON.stringify(metadata),
     headers: { "Content-Type": "application/json" },
     method: "PATCH",
   }));

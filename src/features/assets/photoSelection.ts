@@ -9,7 +9,7 @@ export interface SelectedPhoto {
   width: number;
 }
 
-function readImageDimensions(previewUrl: string) {
+export function readImageDimensions(previewUrl: string) {
   return new Promise<{ height: number; width: number }>((resolve, reject) => {
     const image = new Image();
 
@@ -24,7 +24,7 @@ function readImageDimensions(previewUrl: string) {
     image.addEventListener(
       "error",
       () => {
-        reject(new Error("The selected file could not be displayed as an image."));
+        reject(new Error("The image could not be displayed."));
       },
       { once: true },
     );

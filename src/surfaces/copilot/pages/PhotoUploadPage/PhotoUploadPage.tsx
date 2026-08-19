@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 
 import {
   createFileSignature,
   createSelectedPhoto,
   type SelectedPhoto,
 } from "../../../../features/assets/photoSelection";
-import { uploadPhotoAsset } from "../../../../features/assets/api";
+import { uploadPhotoAssets } from "../../../../features/assets/api";
 
 import { SelectedPhotoCard } from "./SelectedPhotoCard";
 
 const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
 const MAXIMUM_FILE_SIZE = 5 * 1024 * 1024;
+const MAXIMUM_FILES_PER_UPLOAD = 10;
+const MAXIMUM_IMAGE_EDGE = 10_000;
+const MAXIMUM_IMAGE_PIXELS = 50_000_000;
 
 function UploadIcon() {
   return (
@@ -25,22 +28,14 @@ export function PhotoUploadPage() {
   const [isPreparing, setIsPreparing] = useState(false);
   const [message, setMessage] = useState("");
   const [selectedPhotos, setSelectedPhotos] = useState<SelectedPhoto[]>([]);
-  const objectUrlsRef = useRef(new Set<string>());
   const selectedSignaturesRef = useRef(new Set<string>());
-
-  useEffect(() => {
-    const objectUrls = objectUrlsRef.current;
-
-    return () => {
-      objectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
-    };
-  }, []);
 
   const prepareFiles = useCallback(async (fileList: FileList | File[]) => {
     const files = Array.from(fileList);
     const acceptedFiles: File[] = [];
     let duplicateCount = 0;
     let invalidCount = 0;
+    let limitCount = 0;
 
     files.forEach((file) => {
       const signature = createFileSignature(file);
@@ -55,15 +50,22 @@ export function PhotoUploadPage() {
         return;
       }
 
+      if (acceptedFiles.length >= MAXIMUM_FILES_PER_UPLOAD) {
+        limitCount += 1;
+        return;
+      }
+
       selectedSignaturesRef.current.add(signature);
       acceptedFiles.push(file);
     });
 
     if (acceptedFiles.length === 0) {
       if (invalidCount > 0) {
-        setMessage("Select JPG, PNG, or WebP image files.");
+        setMessage("Select valid JPG or PNG images up to 5 MB each.");
       } else if (duplicateCount > 0) {
         setMessage("Those images are already selected.");
+      } else if (limitCount > 0) {
+        setMessage("Upload no more than 10 images at a time.");
       }
       return;
     }
@@ -73,28 +75,22 @@ export function PhotoUploadPage() {
 
     const preparedPhotos = await Promise.all(
       acceptedFiles.map(async (file) => {
-        let localPreviewUrl: string | null = null;
-
         try {
           const selectedPhoto = await createSelectedPhoto(file);
-          localPreviewUrl = selectedPhoto.previewUrl;
-          const asset = await uploadPhotoAsset({
-            file,
-            height: selectedPhoto.height,
-            width: selectedPhoto.width,
-          });
 
-          URL.revokeObjectURL(selectedPhoto.previewUrl);
-          localPreviewUrl = null;
-          return {
-            ...selectedPhoto,
-            id: asset.id,
-            previewUrl: asset.image.url,
-          };
-        } catch {
-          if (localPreviewUrl) {
-            URL.revokeObjectURL(localPreviewUrl);
+          if (
+            selectedPhoto.width > MAXIMUM_IMAGE_EDGE
+            || selectedPhoto.height > MAXIMUM_IMAGE_EDGE
+            || selectedPhoto.width * selectedPhoto.height > MAXIMUM_IMAGE_PIXELS
+          ) {
+            URL.revokeObjectURL(selectedPhoto.previewUrl);
+            selectedSignaturesRef.current.delete(createFileSignature(file));
+            invalidCount += 1;
+            return null;
           }
+
+          return selectedPhoto;
+        } catch {
           selectedSignaturesRef.current.delete(createFileSignature(file));
           invalidCount += 1;
           return null;
@@ -103,17 +99,62 @@ export function PhotoUploadPage() {
     );
 
     const validPhotos = preparedPhotos.filter((photo): photo is SelectedPhoto => photo !== null);
-    setSelectedPhotos((currentPhotos) => [...currentPhotos, ...validPhotos]);
-    setIsPreparing(false);
 
-    const messageParts = [`${validPhotos.length} ${validPhotos.length === 1 ? "image was" : "images were"} uploaded and queued for recognition.`];
-    if (duplicateCount > 0) {
-      messageParts.push(`${duplicateCount} duplicate ${duplicateCount === 1 ? "was" : "were"} skipped.`);
+    if (validPhotos.length === 0) {
+      setIsPreparing(false);
+      setMessage("The selected files did not meet the image upload requirements.");
+      return;
     }
-    if (invalidCount > 0) {
-      messageParts.push(`${invalidCount} invalid ${invalidCount === 1 ? "file was" : "files were"} skipped or failed to upload.`);
+
+    try {
+      const assets = await uploadPhotoAssets(validPhotos.map((photo) => ({
+        clientAssetId: photo.id,
+        file: photo.file,
+      })));
+
+      if (assets.length !== validPhotos.length) {
+        throw new Error("The server returned an incomplete upload response.");
+      }
+
+      const uploadedPhotos = validPhotos.map((photo, index) => {
+        const asset = assets[index];
+        if (!asset) {
+          throw new Error("The server returned an incomplete upload response.");
+        }
+
+        URL.revokeObjectURL(photo.previewUrl);
+        return {
+          ...photo,
+          id: asset.assetId,
+          name: asset.originalFilename,
+          previewUrl: asset.links.image,
+          size: asset.sizeBytes,
+          type: asset.mimeType,
+        };
+      });
+
+      setSelectedPhotos((currentPhotos) => [...currentPhotos, ...uploadedPhotos]);
+
+      const messageParts = [`${uploadedPhotos.length} ${uploadedPhotos.length === 1 ? "image was" : "images were"} uploaded and queued for recognition.`];
+      if (duplicateCount > 0) {
+        messageParts.push(`${duplicateCount} duplicate ${duplicateCount === 1 ? "was" : "were"} skipped.`);
+      }
+      if (limitCount > 0) {
+        messageParts.push(`${limitCount} ${limitCount === 1 ? "file was" : "files were"} skipped because each upload is limited to 10 images.`);
+      }
+      if (invalidCount > 0) {
+        messageParts.push(`${invalidCount} invalid ${invalidCount === 1 ? "file was" : "files were"} skipped.`);
+      }
+      setMessage(messageParts.join(" "));
+    } catch (error) {
+      validPhotos.forEach((photo) => {
+        URL.revokeObjectURL(photo.previewUrl);
+        selectedSignaturesRef.current.delete(createFileSignature(photo.file));
+      });
+      setMessage(error instanceof Error ? error.message : "The images could not be uploaded.");
+    } finally {
+      setIsPreparing(false);
     }
-    setMessage(messageParts.join(" "));
   }, []);
 
   const handleFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
@@ -181,7 +222,7 @@ export function PhotoUploadPage() {
               <UploadIcon />
               {isPreparing ? "Preparing…" : "Upload"}
             </label>
-            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Up to 5 MB each · Select one or multiple images</p>
+            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Up to 5 MB each · Up to 10 images per upload</p>
           </div>
         </div>
 

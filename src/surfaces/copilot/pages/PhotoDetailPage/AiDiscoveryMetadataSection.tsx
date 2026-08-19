@@ -1,9 +1,10 @@
-import type { PhotoAsset } from "../../../../features/assets/contracts";
+import type { AssetDetail } from "../../../../features/assets/contracts";
 
 interface AiDiscoveryMetadataSectionProps {
-  asset: PhotoAsset;
-  rawRecognitionResponse: unknown;
+  asset: AssetDetail;
 }
+
+type Association = AssetDetail["enrichment"]["associations"][number];
 
 const confidenceFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
@@ -42,38 +43,39 @@ function StatusBadge({
   );
 }
 
-function statusTone(status: PhotoAsset["recognition"]["status"]) {
-  if (status === "completed") return "green" as const;
-  if (status === "failed") return "red" as const;
+function statusTone(status: AssetDetail["recognition"]["status"]) {
+  if (status === "SUCCEEDED") return "green" as const;
+  if (status === "FAILED") return "red" as const;
   return "amber" as const;
 }
 
-function statusLabel(status: PhotoAsset["recognition"]["status"]) {
+function statusLabel(status: AssetDetail["recognition"]["status"]) {
   return {
-    completed: "Ready",
-    failed: "Failed",
-    processing: "Analyzing",
-    queued: "Queued",
+    FAILED: "Failed",
+    INDETERMINATE: "Needs Attention",
+    PROCESSING: "Analyzing",
+    QUEUED: "Queued",
+    SUCCEEDED: "Ready",
   }[status];
 }
 
-function editorialMatchLabel(
-  source: PhotoAsset["celebrities"][number]["editorialTextMatch"]["source"],
-) {
-  if (source === "both") return "Pass · Title + Caption";
-  if (source === "title") return "Pass · Title";
-  if (source === "caption") return "Pass · Caption";
-  return "Fail";
+function editorialMatchLabel(evidenceFields: Association["evidenceFields"]) {
+  const hasTitle = evidenceFields.includes("title");
+  const hasCaption = evidenceFields.includes("caption");
+
+  if (hasTitle && hasCaption) return "Pass · Title + Caption";
+  if (hasTitle) return "Pass · Title";
+  if (hasCaption) return "Pass · Caption";
+  return "No match";
 }
 
-function identificationSourceLabel(
-  source: PhotoAsset["celebrities"][number]["identificationSource"],
-) {
-  return {
-    "AI image recognition only": "AI only",
-    "AI image recognition only + Meta": "AI + Metadata",
-    "Meta Only": "Metadata only",
-  }[source];
+function identificationSourceLabel(match: Association) {
+  if (match.source === "metadata-inference") return "Metadata only";
+  return match.evidenceFields.length > 0 ? "AI + Metadata" : "AI only";
+}
+
+function providerLabel(provider: AssetDetail["recognition"]["provider"]) {
+  return provider === "aws-rekognition" ? "AWS Rekognition" : "Fake provider";
 }
 
 function RecognitionLoadingSkeleton() {
@@ -83,7 +85,7 @@ function RecognitionLoadingSkeleton() {
       className="mt-4 animate-pulse motion-reduce:animate-none"
       role="status"
     >
-      <p className="sr-only">AWS is analyzing the image. Celebrity recognition results are loading.</p>
+      <p className="sr-only">Celebrity recognition results are loading.</p>
 
       <div className="grid overflow-hidden rounded-md border border-neutral-200 sm:grid-cols-2 lg:grid-cols-4">
         {["provider", "status", "analyzed", "threshold"].map((item) => (
@@ -120,16 +122,17 @@ function RecognitionLoadingSkeleton() {
   );
 }
 
-export function AiDiscoveryMetadataSection({
-  asset,
-  rawRecognitionResponse,
-}: AiDiscoveryMetadataSectionProps) {
-  const isActive = asset.recognition.status === "queued" || asset.recognition.status === "processing";
-  const isSearchReady = asset.celebrities.some(
-    (celebrity) => celebrity.searchDecision === "Accepted",
+export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSectionProps) {
+  const isRecognitionActive = asset.recognition.status === "QUEUED"
+    || asset.recognition.status === "PROCESSING";
+  const isEnrichmentPending = asset.recognition.status === "SUCCEEDED" && (
+    asset.enrichment.recognitionRevision !== asset.recognition.revision
+    || asset.enrichment.sourceTextRevision !== asset.sourceText.revision
   );
-  const event = asset.usages[0]?.event;
-  const designer = asset.designers[0];
+  const isActive = isRecognitionActive || isEnrichmentPending;
+  const isFailure = asset.recognition.status === "FAILED"
+    || asset.recognition.status === "INDETERMINATE";
+  const associations = asset.enrichment.associations;
 
   return (
     <section
@@ -154,159 +157,170 @@ export function AiDiscoveryMetadataSection({
         </div>
       </div>
 
-      {asset.recognition.status === "failed" ? (
+      {isFailure ? (
         <p className="mt-4 border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert">
-          <strong>Recognition failed.</strong> {asset.recognition.error ?? "Upload the image again after correcting the issue."}
+          <strong>Recognition did not complete.</strong>{" "}
+          {asset.recognition.lastError?.message ?? "The recognition result could not be established safely."}
         </p>
       ) : null}
       {isActive ? (
         <p className="mt-4 border-l-4 border-[#7c34f5] bg-violet-50 px-4 py-3 text-sm text-violet-950" role="status">
-          The photo is available now. Celebrity recognition is running asynchronously and this section will update automatically.
+          {isRecognitionActive
+            ? "The photo is available now. Celebrity recognition is running asynchronously and this section will update automatically."
+            : "Celebrity recognition is complete. Approval decisions are being updated from the latest result."}
         </p>
       ) : null}
       {isActive ? <RecognitionLoadingSkeleton /> : null}
 
       <div className={isActive ? "hidden" : "contents"}>
-      <div className="mt-4 grid gap-2 rounded-md border-l-4 border-[#7c34f5] bg-violet-50 px-4 py-3 text-xs leading-5 text-violet-950 sm:grid-cols-3">
-        <p><strong>99% or higher:</strong> automatically approved.</p>
-        <p><strong>Below 99%:</strong> approved only when title or caption confirms the name.</p>
-        <p><strong>No AI match:</strong> “Celebrity in Designer” metadata can create an approved association.</p>
-      </div>
+        <div className="mt-4 grid gap-2 rounded-md border-l-4 border-[#7c34f5] bg-violet-50 px-4 py-3 text-xs leading-5 text-violet-950 sm:grid-cols-3">
+          <p><strong>Configured threshold or higher:</strong> automatically approved.</p>
+          <p><strong>Below the threshold:</strong> approved only when title or caption confirms the name.</p>
+          <p><strong>No AI match:</strong> supported metadata can create an approved association.</p>
+        </div>
 
-      <dl className="mt-4 grid overflow-hidden rounded-md border border-neutral-300 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="border-b border-neutral-300 p-3 sm:border-r lg:border-b-0">
-          <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Provider</dt>
-          <dd className="mt-1 text-sm font-bold">AWS Rekognition</dd>
-        </div>
-        <div className="border-b border-neutral-300 p-3 lg:border-b-0 lg:border-r">
-          <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Analysis Status</dt>
-          <dd className="mt-1 text-sm font-bold capitalize">{asset.recognition.status}</dd>
-        </div>
-        <div className="border-b border-neutral-300 p-3 sm:border-b-0 sm:border-r">
-          <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Last Analyzed</dt>
-          <dd className="mt-1 text-sm font-bold tabular-nums">{formatAnalyzedAt(asset.recognition.completedAt)}</dd>
-        </div>
-        <div className="p-3">
-          <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Auto-Approve Threshold</dt>
-          <dd className="mt-1 text-sm font-bold tabular-nums">{asset.recognition.threshold}%</dd>
-        </div>
-      </dl>
-
-      <section className="mt-5" aria-labelledby="celebrity-matches-title">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <h3 className="text-base font-bold" id="celebrity-matches-title">
-            Celebrity Matches <span className="font-normal text-neutral-500">({asset.celebrities.length})</span>
-          </h3>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-            <span>One row per celebrity association</span>
-            <StatusBadge tone={isSearchReady ? "green" : "amber"}>
-              {isSearchReady ? "Search Ready" : "Not Search Ready"}
-            </StatusBadge>
+        <dl className="mt-4 grid overflow-hidden rounded-md border border-neutral-300 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="border-b border-neutral-300 p-3 sm:border-r lg:border-b-0">
+            <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Provider</dt>
+            <dd className="mt-1 text-sm font-bold">{providerLabel(asset.recognition.provider)}</dd>
           </div>
-        </div>
+          <div className="border-b border-neutral-300 p-3 lg:border-b-0 lg:border-r">
+            <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Analysis Status</dt>
+            <dd className="mt-1 text-sm font-bold">{statusLabel(asset.recognition.status)}</dd>
+          </div>
+          <div className="border-b border-neutral-300 p-3 sm:border-b-0 sm:border-r">
+            <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Last Analyzed</dt>
+            <dd className="mt-1 text-sm font-bold tabular-nums">{formatAnalyzedAt(asset.recognition.completedAt)}</dd>
+          </div>
+          <div className="p-3">
+            <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Auto-Approve Threshold</dt>
+            <dd className="mt-1 text-sm font-bold">Server configured</dd>
+          </div>
+        </dl>
 
-        <div className="mt-2 overflow-x-auto rounded-md border border-neutral-300">
-          <table className="w-full min-w-[68rem] border-collapse text-left text-sm">
-            <thead className="bg-neutral-100 text-[0.65rem] uppercase tracking-[0.04em] text-neutral-600">
-              <tr>
-                <th className="px-3 py-2.5" scope="col">Celebrity</th>
-                <th className="px-3 py-2.5" scope="col">Match Confidence</th>
-                <th className="px-3 py-2.5" scope="col">Identification Source</th>
-                <th className="px-3 py-2.5" scope="col">Title/Caption Check</th>
-                <th className="px-3 py-2.5" scope="col">Approval Status</th>
-                <th className="px-3 py-2.5" scope="col">Search Decision</th>
-              </tr>
-            </thead>
-            <tbody>
-              {asset.celebrities.length === 0 ? (
-                <tr className="border-t border-neutral-300">
-                  <td className="px-3 py-5 text-neutral-600" colSpan={6}>
-                    {isActive ? "Waiting for recognition results…" : "No celebrity associations found."}
-                  </td>
-                </tr>
-              ) : asset.celebrities.map((match, index) => (
-                <tr className="border-t border-neutral-300" key={`${match.providerPersonId ?? match.canonicalName}-${index}`}>
-                  <td className="px-3 py-2.5">
-                    <strong className="block">{match.canonicalName}</strong>
-                    <span className="text-xs text-neutral-500">
-                      {match.providerPersonId ? `AWS celebrity ID: ${match.providerPersonId}` : "No AWS celebrity ID"}
-                      {match.faceNumber ? ` · Face ${match.faceNumber}` : ""}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 font-bold tabular-nums">
-                    {match.aiResponse ? `${confidenceFormatter.format(match.aiResponse.confidence)}%` : "Metadata only"}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StatusBadge tone={match.identificationSource === "AI image recognition only" ? "neutral" : "purple"}>
-                      {identificationSourceLabel(match.identificationSource)}
-                    </StatusBadge>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StatusBadge tone={match.editorialTextMatch.matched ? "purple" : "neutral"}>
-                      {editorialMatchLabel(match.editorialTextMatch.source)}
-                    </StatusBadge>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StatusBadge tone={match.status === "Approved" ? "green" : "amber"}>
-                      {match.status}
-                    </StatusBadge>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StatusBadge tone={match.searchDecision === "Accepted" ? "green" : "amber"}>
-                      {match.searchDecision}
-                    </StatusBadge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        <section className="mt-5" aria-labelledby="celebrity-matches-title">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <h3 className="text-base font-bold" id="celebrity-matches-title">
+              Celebrity Matches <span className="font-normal text-neutral-500">({associations.length})</span>
+            </h3>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+              <span>One row per celebrity association</span>
+              <StatusBadge tone={asset.enrichment.searchReady ? "green" : "amber"}>
+                {asset.enrichment.searchReady ? "Search Ready" : "Not Search Ready"}
+              </StatusBadge>
+            </div>
+          </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <section className="rounded-md border border-neutral-300 p-4" aria-labelledby="event-metadata-title">
-          <h3 className="text-sm font-bold" id="event-metadata-title">Event Metadata</h3>
-          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-sm border border-neutral-300 p-3">
-              <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Event</dt>
-              <dd className="mt-1 text-sm font-bold">{event?.eventName ?? "Not yet associated"}</dd>
-            </div>
-            <div className="rounded-sm border border-neutral-300 p-3">
-              <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Event Year</dt>
-              <dd className="mt-1 text-sm font-bold tabular-nums">{event?.year ?? "—"}</dd>
-            </div>
-          </dl>
+          <div className="mt-2 overflow-x-auto rounded-md border border-neutral-300">
+            <table className="w-full min-w-[68rem] border-collapse text-left text-sm">
+              <thead className="bg-neutral-100 text-[0.65rem] uppercase tracking-[0.04em] text-neutral-600">
+                <tr>
+                  <th className="px-3 py-2.5" scope="col">Celebrity</th>
+                  <th className="px-3 py-2.5" scope="col">Match Confidence</th>
+                  <th className="px-3 py-2.5" scope="col">Identification Source</th>
+                  <th className="px-3 py-2.5" scope="col">Title/Caption Check</th>
+                  <th className="px-3 py-2.5" scope="col">Approval Status</th>
+                  <th className="px-3 py-2.5" scope="col">Search Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {associations.length === 0 ? (
+                  <tr className="border-t border-neutral-300">
+                    <td className="px-3 py-5 text-neutral-600" colSpan={6}>
+                      No celebrity associations found.
+                    </td>
+                  </tr>
+                ) : associations.map((match) => {
+                  const isApproved = match.decision === "APPROVED";
+                  const hasEditorialEvidence = match.evidenceFields.length > 0;
+
+                  return (
+                    <tr className="border-t border-neutral-300" key={match.identityKey}>
+                      <td className="px-3 py-2.5">
+                        <strong className="block">{match.displayName}</strong>
+                        <span className="text-xs text-neutral-500">
+                          {match.providerPersonId
+                            ? `Provider person ID: ${match.providerPersonId}`
+                            : `Identity: ${match.identityKey}`}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 font-bold tabular-nums">
+                        {match.confidence === null
+                          ? "Metadata only"
+                          : `${confidenceFormatter.format(match.confidence)}%`}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusBadge tone={match.source === "metadata-inference" ? "purple" : "neutral"}>
+                          {identificationSourceLabel(match)}
+                        </StatusBadge>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusBadge tone={hasEditorialEvidence ? "purple" : "neutral"}>
+                          {editorialMatchLabel(match.evidenceFields)}
+                        </StatusBadge>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusBadge tone={isApproved ? "green" : "amber"}>
+                          {isApproved ? "Approved" : "Needs Review"}
+                        </StatusBadge>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusBadge tone={isApproved ? "green" : "amber"}>
+                          {isApproved ? "Accepted" : "Needs Review"}
+                        </StatusBadge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
 
-        <section className="rounded-md border border-neutral-300 p-4" aria-labelledby="designer-associations-title">
-          <h3 className="text-sm font-bold" id="designer-associations-title">Designer Associations</h3>
-          <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-sm border border-neutral-300 p-3">
-              <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Designer</dt>
-              <dd className="mt-1 text-sm font-bold">{designer?.name ?? "Not identified"}</dd>
-            </div>
-            <div className="rounded-sm border border-neutral-300 p-3">
-              <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Evidence</dt>
-              <dd className="mt-1 text-sm font-bold">{designer?.evidence ?? "—"}</dd>
-            </div>
-          </dl>
-        </section>
-      </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <section className="rounded-md border border-neutral-300 p-4" aria-labelledby="event-metadata-title">
+            <h3 className="text-sm font-bold" id="event-metadata-title">Event Metadata</h3>
+            <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-sm border border-neutral-300 p-3">
+                <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Event</dt>
+                <dd className="mt-1 text-sm font-bold">Not yet associated</dd>
+              </div>
+              <div className="rounded-sm border border-neutral-300 p-3">
+                <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Event Year</dt>
+                <dd className="mt-1 text-sm font-bold tabular-nums">—</dd>
+              </div>
+            </dl>
+          </section>
 
-      <details className="mt-5 rounded-md border border-neutral-300">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8]">
-          <strong>Raw Recognition Result</strong>
-          <span className="text-xs text-neutral-500">JSON · retained locally for debugging and audit</span>
-          <span className="ml-auto font-bold text-[#5930c7]">View JSON ▾</span>
-        </summary>
-        <pre className="max-h-80 overflow-auto border-t border-neutral-300 bg-neutral-950 p-4 text-xs leading-5 text-neutral-100">
-          <code>{JSON.stringify(rawRecognitionResponse, null, 2)}</code>
-        </pre>
-      </details>
+          <section className="rounded-md border border-neutral-300 p-4" aria-labelledby="designer-associations-title">
+            <h3 className="text-sm font-bold" id="designer-associations-title">Designer Associations</h3>
+            <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-sm border border-neutral-300 p-3">
+                <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Designer</dt>
+                <dd className="mt-1 text-sm font-bold">Not identified</dd>
+              </div>
+              <div className="rounded-sm border border-neutral-300 p-3">
+                <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Evidence</dt>
+                <dd className="mt-1 text-sm font-bold">—</dd>
+              </div>
+            </dl>
+          </section>
+        </div>
 
-      <p className="mt-4 text-xs leading-5 text-neutral-600">
-        Gallery usage remains managed through “Used in places”; it is not duplicated as a single source-gallery field on the photo.
-      </p>
+        <details className="mt-5 rounded-md border border-neutral-300">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8]">
+            <strong>Normalized Recognition Result</strong>
+            <span className="text-xs text-neutral-500">Safe provider-neutral JSON</span>
+            <span className="ml-auto font-bold text-[#5930c7]">View JSON ▾</span>
+          </summary>
+          <pre className="max-h-80 overflow-auto border-t border-neutral-300 bg-neutral-950 p-4 text-xs leading-5 text-neutral-100">
+            <code>{JSON.stringify(asset.recognition.result, null, 2)}</code>
+          </pre>
+        </details>
+
+        <p className="mt-4 text-xs leading-5 text-neutral-600">
+          Gallery usage remains managed through “Used in places”; it is not duplicated as a single source-gallery field on the photo.
+        </p>
       </div>
     </section>
   );

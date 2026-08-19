@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 import { createPhotoEditData, formatLastModified } from "../../../../features/assets/photoEditData";
 import {
   usePhotoAsset,
+  usePhotoImageDimensions,
   useUpdatePhotoMetadata,
 } from "../../../../features/assets/hooks";
 
@@ -30,13 +31,14 @@ export function PhotoDetailPage() {
   const { assetId = "" } = useParams();
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const assetQuery = usePhotoAsset(assetId);
+  const dimensionsQuery = usePhotoImageDimensions(assetQuery.data?.links.image);
   const metadataMutation = useUpdatePhotoMetadata(assetId);
 
   useEffect(() => {
     setHasUnsavedChanges(false);
   }, [assetId]);
 
-  if (assetQuery.isPending) {
+  if (assetQuery.isPending || (assetQuery.data && dimensionsQuery.isPending)) {
     return (
       <div className="mx-auto w-full max-w-[82rem] px-6 py-12 sm:px-10 lg:px-12" role="status">
         <p className="text-lg font-bold">Loading photo…</p>
@@ -44,16 +46,23 @@ export function PhotoDetailPage() {
     );
   }
 
-  if (assetQuery.isError || !assetQuery.data) {
+  if (assetQuery.isError || dimensionsQuery.isError || !assetQuery.data || !dimensionsQuery.data) {
     return (
       <div className="mx-auto w-full max-w-[82rem] px-6 py-12 sm:px-10 lg:px-12">
         <h1 className="text-3xl font-bold">Photo unavailable</h1>
         <p className="mt-3 text-neutral-700">
-          {assetQuery.error instanceof Error ? assetQuery.error.message : "The photo could not be loaded."}
+          {assetQuery.error instanceof Error
+            ? assetQuery.error.message
+            : dimensionsQuery.error instanceof Error
+              ? dimensionsQuery.error.message
+              : "The photo could not be loaded."}
         </p>
         <button
           className="mt-5 min-h-11 rounded-md border border-[#2948b8] px-4 py-2 font-bold text-[#2948b8]"
-          onClick={() => void assetQuery.refetch()}
+          onClick={() => {
+            void assetQuery.refetch();
+            void dimensionsQuery.refetch();
+          }}
           type="button"
         >
           Try Again
@@ -62,8 +71,8 @@ export function PhotoDetailPage() {
     );
   }
 
-  const { asset, rawRecognitionResponse } = assetQuery.data;
-  const photo = createPhotoEditData(asset);
+  const asset = assetQuery.data;
+  const photo = createPhotoEditData(asset, dimensionsQuery.data);
 
   return (
     <div className="mx-auto w-full max-w-[82rem] px-6 pb-16 pt-6 sm:px-10 sm:pt-8 lg:px-12">
@@ -77,7 +86,7 @@ export function PhotoDetailPage() {
             href="#used-in"
           >
             <LinkIcon />
-            Used in {asset.usages.length} {asset.usages.length === 1 ? "place" : "places"}
+            Used in 0 places
           </a>
         </header>
 
@@ -90,7 +99,7 @@ export function PhotoDetailPage() {
             <PhotoDetailsForm
               formId="photo-details-form"
               isSaved={metadataMutation.isSuccess}
-              key={asset.id}
+              key={`${asset.assetId}-${asset.sourceText.revision}`}
               onDirtyChange={setHasUnsavedChanges}
               onSave={(sourceText) => metadataMutation.mutate(sourceText)}
               photo={photo}
@@ -99,7 +108,7 @@ export function PhotoDetailPage() {
           </div>
         </section>
 
-        <AiDiscoveryMetadataSection asset={asset} rawRecognitionResponse={rawRecognitionResponse} />
+        <AiDiscoveryMetadataSection asset={asset} />
 
         <div className="scroll-mt-24" id="used-in">
           <PhotoWorkflowSections photo={photo} />
