@@ -1,8 +1,11 @@
-import { FormEvent, Fragment, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { sampleArchiveImages } from "../../data/sampleArchive";
+import { SearchHubPage } from "./SearchHubPage";
+
 type Photo = {
-  id: number;
+  id: number | string;
   src: string;
   alt: string;
   event: string;
@@ -25,9 +28,6 @@ const photos: Photo[] = [
   { id: 12, src: "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=1200&q=85", alt: "Fashion week street-style portrait", event: "Fashion Week", year: "2026", caption: "Street style outside the season’s biggest show" },
 ];
 
-const events = [...new Set(photos.map((photo) => photo.event))].sort();
-const years = [...new Set(photos.map((photo) => photo.year))].sort().reverse();
-
 function Advertisement({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`flex items-center justify-center overflow-hidden bg-[#0c2944] px-7 text-center text-white ${compact ? "min-h-64 py-10" : "min-h-[44rem] py-14"}`}>
@@ -43,20 +43,50 @@ function Advertisement({ compact = false }: { compact?: boolean }) {
 
 export function DiscoverPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const query = searchParams.get("q")?.trim() || "search_result";
-  const [searchValue, setSearchValue] = useState(query);
+  const celebrity = searchParams.get("celebrity")?.trim() || "Tracee Ellis Ross";
+  const [searchValue, setSearchValue] = useState(celebrity);
   const [event, setEvent] = useState("All events");
   const [year, setYear] = useState("All years");
 
+  const celebrityPhotos = useMemo<Photo[]>(() => sampleArchiveImages.flatMap((image) => {
+    const matchingCelebrity = image.celebrities.find(
+      (item) => item.status === "Approved" && item.canonical_name.toLocaleLowerCase() === celebrity.toLocaleLowerCase(),
+    );
+    if (!image.enrichment_state.search_ready || !matchingCelebrity) return [];
+    const usage = image.usages[0];
+    return [{
+      id: image.image_id,
+      src: image.image_url,
+      alt: image.source_text.alt_text ?? `${matchingCelebrity.canonical_name} archive photograph`,
+      event: usage?.event.event_name ?? "Archive",
+      year: String(usage?.event.year ?? ""),
+      caption: image.source_text.caption ?? `${matchingCelebrity.canonical_name} photographed at an archive event`,
+    }];
+  }), [celebrity]);
+
+  const availablePhotos = celebrityPhotos.length ? celebrityPhotos : photos;
+  const events = useMemo(() => [...new Set(availablePhotos.map((photo) => photo.event))].sort(), [availablePhotos]);
+  const years = useMemo(() => [...new Set(availablePhotos.map((photo) => photo.year))].sort().reverse(), [availablePhotos]);
+
   const filteredPhotos = useMemo(
-    () => photos.filter((photo) => (event === "All events" || photo.event === event) && (year === "All years" || photo.year === year)),
-    [event, year],
+    () => availablePhotos.filter((photo) => (event === "All events" || photo.event === event) && (year === "All years" || photo.year === year)),
+    [availablePhotos, event, year],
   );
+
+  useEffect(() => {
+    setSearchValue(celebrity);
+    setEvent("All events");
+    setYear("All years");
+  }, [celebrity]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextQuery = searchValue.trim();
-    if (nextQuery) setSearchParams({ q: nextQuery });
+    if (nextQuery) setSearchParams({ q: "search_result", celebrity: nextQuery });
+  }
+
+  if (!searchParams.has("q")) {
+    return <SearchHubPage />;
   }
 
   return (
@@ -67,7 +97,7 @@ export function DiscoverPage() {
           <div className="mt-3 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h1 className="font-editorial text-5xl leading-none tracking-[-0.035em] sm:text-7xl">
-                Results for <span className="italic">“{query}”</span>
+                Results for <span className="italic">“{celebrity}”</span>
               </h1>
               <p className="mt-4 text-sm text-neutral-600">{filteredPhotos.length} photographs found</p>
             </div>

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch server/index.ts",
+    "dev": "vite --host 0.0.0.0 --port 3000",
+    "dev:server": "tsx watch server/index.ts",
     "build": "npm run typecheck && vite build && tsc --project tsconfig.server.json",
     "start": "node dist-server/server/index.js",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.server.json --noEmit && tsc --project tsconfig.test.json",
