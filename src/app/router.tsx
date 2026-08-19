@@ -99,16 +99,6 @@ export const router = createBrowserRouter([
         },
       },
       {
-        path: "bookmarks",
-        lazy: async () => {
-          const { BookmarksPage } = await import(
-            "../surfaces/verso/pages/BookmarksPage/BookmarksPage"
-          );
-
-          return { Component: BookmarksPage };
-        },
-      },
-      {
         path: "*",
         element: (
           <PagePlaceholder
