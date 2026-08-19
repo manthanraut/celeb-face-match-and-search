@@ -11,6 +11,7 @@ export interface AssetCelebrityAssociation {
   evidenceFields: Array<"title" | "caption">;
   identityKey: string;
   providerPersonId: string | null;
+  searchDecision: "APPROVED" | "NEEDS_REVIEW";
   source: "recognition" | "metadata-inference";
 }
 
@@ -63,8 +64,8 @@ export interface AssetRecord {
     associations: AssetCelebrityAssociation[];
     decisionEngineVersion?: number;
     evaluatedAt?: Date;
+    hideFromSearch: boolean;
     recognitionRevision?: number;
-    searchReady: boolean;
     sourceTextRevision?: number;
   };
   createdAt: Date;

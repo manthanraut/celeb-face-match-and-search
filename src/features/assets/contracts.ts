@@ -60,7 +60,6 @@ const assetSchema = z.object({
   sizeBytes: z.number().int().positive(),
   sourceText: assetSourceTextSchema,
   recognitionStatus: assetRecognitionStatusSchema,
-  searchReady: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   links: assetLinksSchema,
@@ -90,6 +89,7 @@ const assetCelebrityAssociationSchema = z.object({
   evidenceFields: z.array(z.enum(["title", "caption"])),
   identityKey: z.string().min(1),
   providerPersonId: z.string().min(1).nullable(),
+  searchDecision: z.enum(["APPROVED", "NEEDS_REVIEW"]),
   source: z.enum(["recognition", "metadata-inference"]),
 });
 
@@ -97,8 +97,8 @@ const assetEnrichmentSchema = z.object({
   associations: z.array(assetCelebrityAssociationSchema),
   decisionEngineVersion: z.number().int().positive().nullable(),
   evaluatedAt: z.string().datetime().nullable(),
+  hideFromSearch: z.boolean(),
   recognitionRevision: z.number().int().positive().nullable(),
-  searchReady: z.boolean(),
   sourceTextRevision: z.number().int().positive().nullable(),
 });
 
@@ -121,6 +121,7 @@ export const assetMetadataUpdateSchema = z
     caption: z.string().max(5_000).nullable().optional(),
     altText: z.string().max(2_000).nullable().optional(),
     backstory: z.string().max(MAX_ASSET_BACKSTORY_LENGTH).nullable().optional(),
+    hideFromSearch: z.boolean().optional(),
   })
   .strict()
   .refine(

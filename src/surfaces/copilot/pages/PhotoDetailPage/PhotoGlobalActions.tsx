@@ -2,6 +2,7 @@ interface PhotoGlobalActionsProps {
   errorMessage: string | null;
   formId: string;
   hasUnsavedChanges: boolean;
+  isPreparing: boolean;
   isSaved: boolean;
   isSaving: boolean;
 }
@@ -10,6 +11,7 @@ export function PhotoGlobalActions({
   errorMessage,
   formId,
   hasUnsavedChanges,
+  isPreparing,
   isSaved,
   isSaving,
 }: PhotoGlobalActionsProps) {
@@ -35,11 +37,11 @@ export function PhotoGlobalActions({
 
       <button
         className="min-h-12 min-w-24 rounded-md border border-neutral-300 px-5 text-base font-bold text-neutral-900 hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8] disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-500"
-        disabled={!hasUnsavedChanges || isSaving}
+        disabled={!hasUnsavedChanges || isPreparing || isSaving}
         form={formId}
         type="submit"
       >
-        {isSaving ? "Saving…" : "Save"}
+        {isPreparing ? "Preparing…" : isSaving ? "Saving…" : "Save"}
       </button>
 
       <button

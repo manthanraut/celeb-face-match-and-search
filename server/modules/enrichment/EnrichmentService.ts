@@ -92,7 +92,17 @@ export class EnrichmentService {
         title: normalizeStoredText(update.title, asset.sourceText.title),
         updatedAt: timestamp,
       };
-      const enrichment = await this.#evaluate({ ...asset, sourceText }, timestamp);
+      const enrichment = await this.#evaluate(
+        {
+          ...asset,
+          enrichment: {
+            ...asset.enrichment,
+            hideFromSearch: update.hideFromSearch ?? asset.enrichment.hideFromSearch,
+          },
+          sourceText,
+        },
+        timestamp,
+      );
       const updated = await this.#enrichmentRepository.saveMetadataAndEnrichment({
         assetId,
         enrichment,
@@ -131,8 +141,8 @@ export class EnrichmentService {
       associations: decision.associations,
       decisionEngineVersion: decision.decisionEngineVersion,
       evaluatedAt: timestamp,
+      hideFromSearch: asset.enrichment.hideFromSearch,
       recognitionRevision: asset.recognition.revision,
-      searchReady: decision.searchReady,
       sourceTextRevision: asset.sourceText.revision,
     };
   }

@@ -8,16 +8,22 @@ import {
   assetMetadataUpdateSchema,
   assetUploadManifestSchema,
 } from "../../shared/assets.js";
+import { photoSaveRequestSchema } from "../../shared/photoSave.js";
 import { ApiError } from "../middleware/error-handler.js";
 import { createImageUploadHandlers } from "../middleware/image-upload.js";
 import type { AssetService, PreparedAssetUpload } from "../services/AssetService.js";
+import type { PhotoSaveService } from "../services/PhotoSaveService.js";
 
 export type AssetRouteService = Pick<
   AssetService,
   "getById" | "ingest" | "list" | "openImage" | "retryRecognition" | "updateMetadata"
 >;
+export type PhotoSaveRouteService = Pick<PhotoSaveService, "save">;
 
-export function createAssetRouter(assetService: AssetRouteService): Router {
+export function createAssetRouter(
+  assetService: AssetRouteService,
+  photoSaveService: PhotoSaveRouteService,
+): Router {
   const assetRouter = Router();
   const imageUploadHandlers = createImageUploadHandlers();
 
@@ -95,6 +101,12 @@ export function createAssetRouter(assetService: AssetRouteService): Router {
     const assetId = assetIdSchema.parse(request.params.assetId);
     const metadata = assetMetadataUpdateSchema.parse(request.body);
     response.json(await assetService.updateMetadata(assetId, metadata));
+  });
+
+  assetRouter.patch("/:assetId/editorial", async (request, response) => {
+    const assetId = assetIdSchema.parse(request.params.assetId);
+    const update = photoSaveRequestSchema.parse(request.body);
+    response.json(await photoSaveService.save(assetId, update));
   });
 
   assetRouter.get("/:assetId", async (request, response) => {

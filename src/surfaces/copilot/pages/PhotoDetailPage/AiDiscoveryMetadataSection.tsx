@@ -1,7 +1,16 @@
 import type { AssetDetail } from "../../../../features/assets/contracts";
+import type { GalleryEventContext } from "../../../../../shared/galleries";
 
 interface AiDiscoveryMetadataSectionProps {
   asset: AssetDetail;
+  eventMetadata: GalleryEventContext | null;
+  eventMetadataError: string | null;
+  hideFromSearch: boolean;
+  isAddingToContent: boolean;
+  isEventMetadataLoading: boolean;
+  isSaving: boolean;
+  onAddToContent: () => void;
+  onHideFromSearchChange: (checked: boolean) => void;
 }
 
 type Association = AssetDetail["enrichment"]["associations"][number];
@@ -126,7 +135,17 @@ function RecognitionLoadingSkeleton() {
   );
 }
 
-export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSectionProps) {
+export function AiDiscoveryMetadataSection({
+  asset,
+  eventMetadata,
+  eventMetadataError,
+  hideFromSearch,
+  isAddingToContent,
+  isEventMetadataLoading,
+  isSaving,
+  onAddToContent,
+  onHideFromSearchChange,
+}: AiDiscoveryMetadataSectionProps) {
   const isRecognitionActive = asset.recognition.status === "QUEUED"
     || asset.recognition.status === "PROCESSING";
   const isEnrichmentPending = asset.recognition.status === "SUCCEEDED" && (
@@ -137,6 +156,9 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
   const isFailure = asset.recognition.status === "FAILED"
     || asset.recognition.status === "INDETERMINATE";
   const associations = asset.enrichment.associations;
+  const hasApprovedSearchDecision = associations.some(
+    ({ searchDecision }) => searchDecision === "APPROVED",
+  );
 
   return (
     <section
@@ -144,7 +166,7 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
       className="mt-6 rounded-md border border-neutral-200 bg-white p-5 shadow-[0_2px_5px_rgb(0_0_0/0.16)]"
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-balance text-xl font-bold" id="ai-discovery-title">
               AI &amp; Discovery Metadata
@@ -159,6 +181,18 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
             System-generated metadata used by celebrity and designer image search.
           </p>
         </div>
+        <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-3 text-sm font-bold">
+          <span>Hide from search</span>
+          <input
+            checked={hideFromSearch}
+            className="peer sr-only"
+            disabled={isSaving}
+            onChange={(event) => onHideFromSearchChange(event.target.checked)}
+            role="switch"
+            type="checkbox"
+          />
+          <span className="relative h-7 w-12 rounded-full bg-neutral-400 transition-colors after:absolute after:left-1 after:top-1 after:size-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[#2948b8] peer-checked:after:translate-x-5 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#2948b8] peer-disabled:cursor-not-allowed peer-disabled:opacity-60 motion-reduce:transition-none motion-reduce:after:transition-none" />
+        </label>
       </div>
 
       {isFailure ? (
@@ -209,8 +243,12 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
             </h3>
             <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
               <span>One row per celebrity association</span>
-              <StatusBadge tone={asset.enrichment.searchReady ? "green" : "amber"}>
-                {asset.enrichment.searchReady ? "Search Ready" : "Not Search Ready"}
+              <StatusBadge tone={hasApprovedSearchDecision && !hideFromSearch ? "green" : "amber"}>
+                {hideFromSearch
+                  ? "Hidden from Search"
+                  : hasApprovedSearchDecision
+                    ? "Search Ready"
+                    : "Not Search Ready"}
               </StatusBadge>
             </div>
           </div>
@@ -236,6 +274,7 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
                   </tr>
                 ) : associations.map((match) => {
                   const isApproved = match.decision === "APPROVED";
+                  const isSearchApproved = match.searchDecision === "APPROVED";
                   const hasEditorialEvidence = match.evidenceFields.length > 0;
 
                   return (
@@ -267,8 +306,12 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
                         </StatusBadge>
                       </td>
                       <td className="px-3 py-2.5">
-                        <StatusBadge tone={isApproved ? "green" : "amber"}>
-                          {isApproved ? "Accepted" : "Needs Review"}
+                        <StatusBadge tone={isSearchApproved && !hideFromSearch ? "green" : "amber"}>
+                          {hideFromSearch
+                            ? "Hidden"
+                            : isSearchApproved
+                              ? "Approved"
+                              : "Needs Review"}
                         </StatusBadge>
                       </td>
                     </tr>
@@ -281,17 +324,44 @@ export function AiDiscoveryMetadataSection({ asset }: AiDiscoveryMetadataSection
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <section className="rounded-md border border-neutral-300 p-4" aria-labelledby="event-metadata-title">
-            <h3 className="text-sm font-bold" id="event-metadata-title">Event Metadata</h3>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-bold" id="event-metadata-title">Event Metadata</h3>
+              <button
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[#2948b8] px-3 py-2 text-xs font-bold text-[#2948b8] hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8] disabled:cursor-not-allowed disabled:border-neutral-300 disabled:text-neutral-500"
+                disabled={isAddingToContent || isSaving}
+                onClick={onAddToContent}
+                type="button"
+              >
+                {isAddingToContent ? (
+                  <span
+                    aria-hidden="true"
+                    className="size-4 animate-spin rounded-full border-2 border-neutral-300 border-t-[#2948b8] motion-reduce:animate-none"
+                  />
+                ) : null}
+                {isAddingToContent ? "Adding image…" : "Image gets added in content"}
+              </button>
+            </div>
             <dl className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="rounded-sm border border-neutral-300 p-3">
                 <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Event</dt>
-                <dd className="mt-1 text-sm font-bold">Not yet associated</dd>
+                <dd className="mt-1 text-sm font-bold">
+                  {isEventMetadataLoading
+                    ? "Loading…"
+                    : eventMetadata?.id === "golden-globes"
+                      ? "Golden Globe"
+                      : eventMetadata?.name ?? "Not yet associated"}
+                </dd>
               </div>
               <div className="rounded-sm border border-neutral-300 p-3">
                 <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Event Year</dt>
-                <dd className="mt-1 text-sm font-bold tabular-nums">—</dd>
+                <dd className="mt-1 text-sm font-bold tabular-nums">
+                  {isEventMetadataLoading ? "Loading…" : eventMetadata?.year ?? "—"}
+                </dd>
               </div>
             </dl>
+            {eventMetadataError ? (
+              <p className="mt-3 text-xs text-red-700" role="alert">{eventMetadataError}</p>
+            ) : null}
           </section>
 
           <section className="rounded-md border border-neutral-300 p-4" aria-labelledby="designer-associations-title">

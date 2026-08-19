@@ -12,8 +12,8 @@ describe("photo edit data utilities", () => {
         associations: [],
         decisionEngineVersion: null,
         evaluatedAt: null,
+        hideFromSearch: false,
         recognitionRevision: null,
-        searchReady: false,
         sourceTextRevision: null,
       },
       links: {
@@ -33,7 +33,6 @@ describe("photo edit data utilities", () => {
         status: "QUEUED",
       },
       recognitionStatus: "QUEUED",
-      searchReady: false,
       sizeBytes: 2_500_000,
       sourceText: {
         altText: null,

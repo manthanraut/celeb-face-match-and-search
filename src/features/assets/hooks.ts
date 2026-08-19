@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { GalleryEventContext } from "../../../shared/galleries";
 import type { AssetDetail, AssetMetadataUpdate } from "./contracts";
-import { getPhotoAsset, updatePhotoMetadata } from "./api";
+import { getPhotoAsset, getPhotoEventMetadata, savePhotoChanges } from "./api";
 import { readImageDimensions } from "./photoSelection";
 
 function assetQueryKey(assetId: string) {
   return ["photo-asset", assetId] as const;
+}
+
+function eventMetadataQueryKey(assetId: string) {
+  return ["photo-event-metadata", assetId] as const;
 }
 
 function shouldPollForEnrichment(asset: AssetDetail | undefined) {
@@ -40,13 +45,30 @@ export function usePhotoImageDimensions(imageUrl: string | undefined) {
   });
 }
 
-export function useUpdatePhotoMetadata(assetId: string) {
+export function usePhotoEventMetadata(assetId: string) {
+  return useQuery({
+    enabled: Boolean(assetId),
+    queryFn: () => getPhotoEventMetadata(assetId),
+    queryKey: eventMetadataQueryKey(assetId),
+  });
+}
+
+export function useSavePhoto(assetId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (sourceText: AssetMetadataUpdate) => updatePhotoMetadata(assetId, sourceText),
+    mutationFn: ({
+      eventMetadata,
+      sourceText,
+    }: {
+      eventMetadata: GalleryEventContext | null;
+      sourceText: AssetMetadataUpdate;
+    }) => savePhotoChanges(assetId, sourceText, eventMetadata),
     onSuccess: (result) => {
-      queryClient.setQueryData(assetQueryKey(assetId), result);
+      queryClient.setQueryData(assetQueryKey(assetId), result.asset);
+      if (result.eventMetadata) {
+        queryClient.setQueryData(eventMetadataQueryKey(assetId), result.eventMetadata);
+      }
     },
   });
 }

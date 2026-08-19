@@ -73,7 +73,7 @@ function evaluate(
   } = {},
 ) {
   return evaluateCelebrityDecisions({
-    approvalThreshold: 90,
+    approvalThreshold: 99,
     catalog: CATALOG,
     recognitionResult: result,
     sourceText: {
@@ -85,24 +85,24 @@ function evaluate(
   });
 }
 
-describe("celebrity decision engine v1", () => {
+describe("celebrity decision engine v2", () => {
   it("approves recognition confidence at the configured threshold", () => {
-    const result = evaluate(recognitionResult([face("Rihanna", 90, "aws-rihanna")]));
+    const result = evaluate(recognitionResult([face("Rihanna", 99, "aws-rihanna")]));
 
     expect(result).toEqual({
       associations: [
         {
-          confidence: 90,
+          confidence: 99,
           decision: "APPROVED",
           displayName: "Rihanna",
           evidenceFields: [],
           identityKey: "rihanna",
           providerPersonId: "aws-rihanna",
+          searchDecision: "APPROVED",
           source: "recognition",
         },
       ],
       decisionEngineVersion: CELEBRITY_DECISION_ENGINE_VERSION,
-      searchReady: true,
     });
   });
 
@@ -116,8 +116,8 @@ describe("celebrity decision engine v1", () => {
       confidence: 50.4,
       decision: "APPROVED",
       evidenceFields: ["title", "caption"],
+      searchDecision: "APPROVED",
     });
-    expect(result.searchReady).toBe(true);
   });
 
   it("keeps an uncorroborated low-confidence candidate for review and out of search", () => {
@@ -128,8 +128,8 @@ describe("celebrity decision engine v1", () => {
     expect(result.associations[0]).toMatchObject({
       decision: "NEEDS_REVIEW",
       evidenceFields: [],
+      searchDecision: "NEEDS_REVIEW",
     });
-    expect(result.searchReady).toBe(false);
   });
 
   it("ignores alt text as identity evidence", () => {
@@ -184,10 +184,10 @@ describe("celebrity decision engine v1", () => {
         evidenceFields: ["caption"],
         identityKey: "rihanna",
         providerPersonId: null,
+        searchDecision: "APPROVED",
         source: "metadata-inference",
       },
     ]);
-    expect(result.searchReady).toBe(true);
   });
 
   it("adds a metadata-only identity when recognition returns unrelated candidates", () => {
@@ -217,10 +217,10 @@ describe("celebrity decision engine v1", () => {
         evidenceFields: ["title"],
         identityKey: "doja-cat",
         providerPersonId: null,
+        searchDecision: "APPROVED",
         source: "metadata-inference",
       },
     ]);
-    expect(result.searchReady).toBe(true);
   });
 
   it("does not infer an unknown X in Y identity or infer before recognition completes", () => {
@@ -242,15 +242,16 @@ describe("celebrity decision engine v1", () => {
     expect(result.associations).toEqual([
       expect.objectContaining({
         confidence: 95,
-        decision: "APPROVED",
+        decision: "NEEDS_REVIEW",
         identityKey: "rihanna",
+        searchDecision: "NEEDS_REVIEW",
       }),
       expect.objectContaining({
         confidence: 70,
         decision: "NEEDS_REVIEW",
         identityKey: "zendaya",
+        searchDecision: "NEEDS_REVIEW",
       }),
     ]);
-    expect(result.searchReady).toBe(true);
   });
 });

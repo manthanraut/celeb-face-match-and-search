@@ -9,7 +9,7 @@ const mongoUriSchema = z
 
 const configurablePercentageSchema = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-  z.coerce.number().min(0).max(100).default(90),
+  z.coerce.number().min(0).max(100).default(99),
 );
 
 const recognitionProviderSchema = z.enum(["aws-rekognition", "fake"]);

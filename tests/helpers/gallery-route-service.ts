@@ -6,6 +6,7 @@ export function createUnusedGalleryRouteService(): GalleryRouteService {
   };
 
   return {
+    getAssetEventMetadata: unexpectedCall,
     removeAsset: unexpectedCall,
     syncContext: unexpectedCall,
   };

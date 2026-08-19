@@ -106,7 +106,7 @@ function makeRecord({
       status: "QUEUED",
       ...recognition,
     },
-    enrichment: { associations: [], searchReady: false },
+    enrichment: { associations: [], hideFromSearch: false },
     createdAt: FIXED_TIME,
     updatedAt: FIXED_TIME,
   };
@@ -307,7 +307,7 @@ describe("AssetService ingestion", () => {
         revision: 1,
         status: "QUEUED",
       },
-      enrichment: { associations: [], searchReady: false },
+      enrichment: { associations: [], hideFromSearch: false },
       createdAt: FIXED_TIME,
       updatedAt: FIXED_TIME,
     });
@@ -323,7 +323,6 @@ describe("AssetService ingestion", () => {
           },
           originalFilename: "001-zendaya__met.gala.JPG",
           recognitionStatus: "QUEUED",
-          searchReady: false,
         }),
         expect.objectContaining({
           assetId: SECOND_ASSET_ID,
@@ -604,19 +603,21 @@ describe("AssetService reads", () => {
       associations: [],
       decisionEngineVersion: 1,
       evaluatedAt: FIXED_TIME,
+      hideFromSearch: true,
       recognitionRevision: 2,
-      searchReady: false,
       sourceTextRevision: 2,
     };
     vi.mocked(enrichmentService.updateMetadata).mockResolvedValue(updated);
 
     const detail = await service.updateMetadata(FIRST_ASSET_ID, {
       backstory: "Photographed shortly before the Met Gala arrival.",
+      hideFromSearch: true,
       title: "Rihanna in Marc Jacobs",
     });
 
     expect(enrichmentService.updateMetadata).toHaveBeenCalledWith(FIRST_ASSET_ID, {
       backstory: "Photographed shortly before the Met Gala arrival.",
+      hideFromSearch: true,
       title: "Rihanna in Marc Jacobs",
     });
     expect(detail).toMatchObject({
@@ -624,8 +625,8 @@ describe("AssetService reads", () => {
         associations: [],
         decisionEngineVersion: 1,
         evaluatedAt: FIXED_TIME.toISOString(),
+        hideFromSearch: true,
         recognitionRevision: 2,
-        searchReady: false,
         sourceTextRevision: 2,
       },
       sourceText: {

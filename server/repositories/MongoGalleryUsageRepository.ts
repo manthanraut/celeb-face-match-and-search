@@ -1,6 +1,10 @@
 import type { Collection, Db, Document } from "mongodb";
 
-import type { CanonicalEventId } from "../../shared/galleries.js";
+import {
+  canonicalEventNames,
+  type CanonicalEventId,
+  type GalleryEventContext,
+} from "../../shared/galleries.js";
 import type { AssetCelebrityAssociation } from "./AssetRepository.js";
 import { collectionNames } from "../database/indexes.js";
 import type { GalleryUsageRepository, SyncGalleryUsagesInput } from "./GalleryUsageRepository.js";
@@ -43,6 +47,26 @@ export class MongoGalleryUsageRepository implements GalleryUsageRepository, Vers
 
   constructor(database: Db) {
     this.#galleryUsages = database.collection<GalleryUsageDocument>(collectionNames.galleryUsages);
+  }
+
+  async findLatestEventContext(assetId: string): Promise<GalleryEventContext | null> {
+    const usage = await this.#galleryUsages.findOne(
+      {
+        assetId,
+        event: { $ne: null },
+        year: { $ne: null },
+      },
+      { sort: { updatedAt: -1, galleryId: -1 } },
+    );
+    if (!usage?.event || usage.year === null) {
+      return null;
+    }
+
+    return {
+      id: usage.event,
+      name: usage.eventName ?? canonicalEventNames[usage.event],
+      year: usage.year,
+    };
   }
 
   async syncGallery({
@@ -123,12 +147,18 @@ export class MongoGalleryUsageRepository implements GalleryUsageRepository, Vers
                 $match: {
                   "enrichment.associations": {
                     $elemMatch: {
-                      decision: "APPROVED",
                       identityKey: celebritySlug,
+                      $or: [
+                        { searchDecision: "APPROVED" },
+                        {
+                          decision: "APPROVED",
+                          searchDecision: { $exists: false },
+                        },
+                      ],
                     },
                   },
                   "enrichment.decisionEngineVersion": decisionEngineVersion,
-                  "enrichment.searchReady": true,
+                  "enrichment.hideFromSearch": { $ne: true },
                   "recognition.status": "SUCCEEDED",
                   $expr: {
                     $and: [
@@ -187,7 +217,10 @@ function toSearchRepositoryItem(document: AggregatedGalleryUsage): VersoSearchRe
   return {
     addedAt: document.addedAt,
     assetId: document.assetId,
-    associations: document.asset.enrichment.associations,
+    associations: document.asset.enrichment.associations.map((association) => ({
+      ...association,
+      searchDecision: association.searchDecision ?? association.decision,
+    })),
     event: document.event ?? null,
     eventName: document.eventName ?? null,
     galleryId: document.galleryId,

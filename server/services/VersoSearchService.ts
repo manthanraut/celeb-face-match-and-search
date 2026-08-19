@@ -128,7 +128,7 @@ function toVersoCelebrity(celebrity: CelebrityCatalogEntry): VersoCelebrity {
 
 function toVersoSearchAsset(item: VersoSearchRepositoryItem): VersoSearchAsset {
   const celebrities = item.associations
-    .filter(({ decision }) => decision === "APPROVED")
+    .filter(({ searchDecision }) => searchDecision === "APPROVED")
     .map(({ displayName, identityKey }) => ({ displayName, slug: identityKey }))
     .sort((first, second) =>
       first.displayName.localeCompare(second.displayName, "en-US") ||

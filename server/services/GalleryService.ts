@@ -1,4 +1,5 @@
 import type {
+  AssetEventMetadataResponse,
   GalleryAssetRemovalResponse,
   GalleryContextResponse,
   GalleryContextUpdate,
@@ -28,6 +29,15 @@ export class GalleryService {
     this.#assetRepository = assetRepository;
     this.#clock = clock;
     this.#usageRepository = usageRepository;
+  }
+
+  async getAssetEventMetadata(assetId: string): Promise<AssetEventMetadataResponse> {
+    const existingAssetIds = await this.#assetRepository.findExistingAssetIds([assetId]);
+    if (!existingAssetIds.has(assetId)) {
+      throw new ApiError(404, "ASSET_NOT_FOUND", "The asset was not found.");
+    }
+
+    return { event: await this.#usageRepository.findLatestEventContext(assetId) };
   }
 
   syncContext(galleryId: string, update: GalleryContextUpdate): Promise<GalleryContextResponse> {

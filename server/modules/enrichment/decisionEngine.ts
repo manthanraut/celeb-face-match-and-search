@@ -19,7 +19,6 @@ export interface CelebrityDecisionInput {
 export interface CelebrityDecisionResult {
   associations: AssetCelebrityAssociation[];
   decisionEngineVersion: typeof CELEBRITY_DECISION_ENGINE_VERSION;
-  searchReady: boolean;
 }
 
 type EvidenceField = AssetCelebrityAssociation["evidenceFields"][number];
@@ -58,14 +57,16 @@ export function evaluateCelebrityDecisions({
     ]);
     const approvedByConfidence =
       face.confidence !== null && face.confidence >= approvalThreshold;
+    const decision =
+      approvedByConfidence || evidenceFields.length > 0 ? "APPROVED" : "NEEDS_REVIEW";
     mergeAssociation(associations, {
       confidence: face.confidence,
-      decision:
-        approvedByConfidence || evidenceFields.length > 0 ? "APPROVED" : "NEEDS_REVIEW",
+      decision,
       displayName,
       evidenceFields,
       identityKey,
       providerPersonId: face.providerPersonId,
+      searchDecision: decision,
       source: "recognition",
     });
   }
@@ -88,6 +89,7 @@ export function evaluateCelebrityDecisions({
         evidenceFields: [field],
         identityKey: catalogEntry.slug,
         providerPersonId: null,
+        searchDecision: "APPROVED",
         source: "metadata-inference",
       });
     }
@@ -97,7 +99,6 @@ export function evaluateCelebrityDecisions({
   return {
     associations: result,
     decisionEngineVersion: CELEBRITY_DECISION_ENGINE_VERSION,
-    searchReady: result.some(({ decision }) => decision === "APPROVED"),
   };
 }
 
@@ -198,6 +199,10 @@ function mergeAssociation(
     ),
     identityKey: existing.identityKey,
     providerPersonId: existing.providerPersonId ?? candidate.providerPersonId,
+    searchDecision:
+      existing.searchDecision === "APPROVED" || candidate.searchDecision === "APPROVED"
+        ? "APPROVED"
+        : "NEEDS_REVIEW",
     source:
       existing.source === "recognition" || candidate.source === "recognition"
         ? "recognition"
