@@ -1,7 +1,6 @@
 import express from "express";
 
 import { apiRouter } from "./routes/api.js";
-import { errorHandler } from "./middleware/error-handler.js";
 
 export function createApp() {
   const app = express();
@@ -9,7 +8,6 @@ export function createApp() {
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
   app.use("/api", apiRouter);
-  app.use(errorHandler);
 
   return app;
 }

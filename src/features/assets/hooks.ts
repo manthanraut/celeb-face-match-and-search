@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { UpdateSourceTextInput } from "../../../shared/contracts/assets";
-import { getPhotoAsset, rerunPhotoRecognition, updatePhotoMetadata } from "./api";
+import type { UpdateSourceTextInput } from "./contracts";
+import { getPhotoAsset, updatePhotoMetadata } from "./api";
 
 function assetQueryKey(assetId: string) {
   return ["photo-asset", assetId] as const;
@@ -26,14 +26,5 @@ export function useUpdatePhotoMetadata(assetId: string) {
     onSuccess: (result) => {
       queryClient.setQueryData(assetQueryKey(assetId), result);
     },
-  });
-}
-
-export function useRerunPhotoRecognition(assetId: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: () => rerunPhotoRecognition(assetId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: assetQueryKey(assetId) }),
   });
 }

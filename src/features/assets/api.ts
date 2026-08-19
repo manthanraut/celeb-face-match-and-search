@@ -3,7 +3,7 @@ import {
   type PhotoAsset,
   type PhotoAssetResponse,
   type UpdateSourceTextInput,
-} from "../../../shared/contracts/assets";
+} from "./contracts";
 
 interface UploadPhotoAssetInput {
   file: File;
@@ -62,11 +62,4 @@ export async function updatePhotoMetadata(
     headers: { "Content-Type": "application/json" },
     method: "PATCH",
   }));
-}
-
-export async function rerunPhotoRecognition(assetId: string) {
-  const response = await fetch(`/api/assets/${assetId}/recognition`, { method: "POST" });
-  if (!response.ok) {
-    throw new Error(await readError(response));
-  }
 }

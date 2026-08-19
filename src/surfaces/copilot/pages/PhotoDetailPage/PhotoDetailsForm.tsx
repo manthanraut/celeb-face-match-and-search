@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import type { SourceText, UpdateSourceTextInput } from "../../../../../shared/contracts/assets";
+import type { SourceText, UpdateSourceTextInput } from "../../../../features/assets/contracts";
 import type { PhotoEditData } from "../../../../features/assets/photoEditData";
 
 interface PhotoDetailsFormProps {

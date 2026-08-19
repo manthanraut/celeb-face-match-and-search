@@ -1,4 +1,4 @@
-import type { PhotoAsset } from "../../../../../shared/contracts/assets";
+import type { PhotoAsset } from "../../../../features/assets/contracts";
 
 interface AiDiscoveryMetadataSectionProps {
   asset: PhotoAsset;

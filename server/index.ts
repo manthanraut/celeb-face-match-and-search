@@ -30,7 +30,9 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(environment.PORT);
+  app.listen(environment.PORT, () => {
+    console.log(`Application available at http://localhost:${environment.PORT}`);
+  });
 }
 
 startServer().catch((error: unknown) => {

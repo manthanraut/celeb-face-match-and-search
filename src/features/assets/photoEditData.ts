@@ -85,4 +85,4 @@ export function formatFileType(type: string) {
   const subtype = type.split("/")[1];
   return subtype ? subtype.toUpperCase() : type.toUpperCase();
 }
-import type { PhotoAsset } from "../../../shared/contracts/assets";
+import type { PhotoAsset } from "./contracts";

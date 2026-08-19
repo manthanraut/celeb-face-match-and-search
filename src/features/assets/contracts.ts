@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { recognitionResultSchema } from "./recognition.js";
+import { recognitionResultSchema } from "../../../shared/contracts/recognition.js";
 
 export const assetIdSchema = z.string().uuid();
 
