@@ -129,7 +129,7 @@ async function shutdownApplication(
   }
 }
 
-main().catch(() => {
-  console.error("Unable to start the application.");
+main().catch((error: unknown) => {
+  console.error("Unable to start the application.", error);
   process.exitCode = 1;
 });
