@@ -66,7 +66,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate replace to="/galleries/met-gala-2026" />,
+        element: <Navigate replace to="/discover?q=search_result" />,
       },
       {
         path: "galleries/met-gala-2026",

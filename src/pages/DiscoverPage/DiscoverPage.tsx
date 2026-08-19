@@ -43,7 +43,7 @@ function Advertisement({ compact = false }: { compact?: boolean }) {
 
 export function DiscoverPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const query = searchParams.get("q")?.trim() || "Tom Holland";
+  const query = searchParams.get("q")?.trim() || "search_result";
   const [searchValue, setSearchValue] = useState(query);
   const [event, setEvent] = useState("All events");
   const [year, setYear] = useState("All years");

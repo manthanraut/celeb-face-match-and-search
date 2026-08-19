@@ -88,7 +88,7 @@ export function GalleryPage() {
 
           <Link
             className="inline-flex min-h-11 w-full items-center justify-center bg-neutral-950 px-6 py-2.5 text-center text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-950 sm:w-fit"
-            to="/discover"
+            to="/discover?q=search_result"
           >
             Explore celebrity photos
             <span aria-hidden="true" className="ml-3 text-lg">
