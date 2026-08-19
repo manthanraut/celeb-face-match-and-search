@@ -1,24 +1,31 @@
-import { FormEvent, Fragment, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Fragment, useMemo, useState, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { sampleArchiveImages } from "../../data/sampleArchive";
+import { DiscoveryImageCard } from "./DiscoveryImageCard";
+import { DiscoveryImageDialog } from "./DiscoveryImageDialog";
+import {
+  toDiscoveryImageDetails,
+  type DiscoveryImageDetails,
+} from "./discoveryImageDetails";
 
-type Result = { id: string; name: string; event: string; year: number | null; image: string };
 const pageSize = 15;
 
-const results: Result[] = sampleArchiveImages.flatMap((image) => {
+const results: DiscoveryImageDetails[] = sampleArchiveImages.flatMap((image) => {
   if (!image.enrichment_state.search_ready) return [];
-  const usage = image.usages[0];
-  return image.celebrities.filter((celebrity) => celebrity.status === "Approved").map((celebrity) => ({
-    id: image.image_id,
-    name: celebrity.canonical_name,
-    event: usage?.event.event_name ?? "Archive",
-    year: usage?.event.year ?? null,
-    image: image.image_url,
-  }));
+  return image.celebrities
+    .filter((celebrity) => celebrity.status === "Approved")
+    .map((celebrity) => toDiscoveryImageDetails(image, celebrity));
 });
 
-const people = Array.from(new Map(results.map((result) => [result.name, { name: result.name, image: result.image }])).values());
+const people = Array.from(
+  new Map(
+    results.map((result) => [
+      result.celebrityName,
+      { image: result.imageUrl, name: result.celebrityName },
+    ]),
+  ).values(),
+);
 
 function Heart({ filled = false }: { filled?: boolean }) {
   return <span aria-hidden="true">{filled ? "♥" : "♡"}</span>;
@@ -26,6 +33,7 @@ function Heart({ filled = false }: { filled?: boolean }) {
 
 export function SearchHubPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("Tracee Ellis Ross");
   const [saved, setSaved] = useState<Set<string>>(new Set(["img_002"]));
@@ -34,10 +42,15 @@ export function SearchHubPage() {
 
   const celebrityResults = useMemo(() => {
     const normalizedQuery = submittedQuery.trim().toLocaleLowerCase();
-    return results.filter((item) => item.name.toLocaleLowerCase() === normalizedQuery);
+    return results.filter(
+      (item) => item.celebrityName.toLocaleLowerCase() === normalizedQuery,
+    );
   }, [submittedQuery]);
   const pageCount = Math.ceil(celebrityResults.length / pageSize);
   const visibleResults = celebrityResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const selectedImage = celebrityResults.find(
+    (result) => result.id === searchParams.get("photo"),
+  ) ?? null;
 
   function selectCelebrity(name: string) {
     setQuery(name);
@@ -52,6 +65,19 @@ export function SearchHubPage() {
     setSubmittedQuery(nextQuery);
     setCurrentPage(1);
     navigate(`/discover/?q=search_result&celebrity=${encodeURIComponent(nextQuery)}`);
+  }
+
+  function openImage(details: DiscoveryImageDetails) {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("photo", details.id);
+    setSearchParams(nextParams);
+  }
+
+  function dismissImage() {
+    if (!searchParams.has("photo")) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("photo");
+    setSearchParams(nextParams, { replace: true });
   }
 
   function toggleSaved(id: string) {
@@ -89,7 +115,7 @@ export function SearchHubPage() {
             <button aria-pressed={submittedQuery === person.name} className="w-20 shrink-0 text-center" key={person.name} onClick={() => selectCelebrity(person.name)} type="button">
               <img alt={person.name} className={`mx-auto size-16 rounded-full object-cover p-0.5 grayscale ${submittedQuery === person.name ? "border-2 border-neutral-950" : "border border-neutral-400"}`} src={person.image} />
               <span className="font-editorial mt-2 flex h-8 items-start justify-center text-sm leading-4">{person.name}</span>
-              <span className="mt-0.5 block text-[0.62rem] text-neutral-500">{results.filter((result) => result.name === person.name).length} photos</span>
+              <span className="mt-0.5 block text-[0.62rem] text-neutral-500">{results.filter((result) => result.celebrityName === person.name).length} photos</span>
             </button>
           ))}
           <button aria-expanded={showMorePeople} className="w-20 shrink-0 text-center" onClick={() => setShowMorePeople((current) => !current)} type="button">
@@ -107,10 +133,29 @@ export function SearchHubPage() {
             {visibleResults.map((result, index) => (
               <Fragment key={result.id}>
                 {index === 6 && <aside aria-label="Sponsored content" className="relative z-10 border-y border-neutral-200 bg-[#f5f5f5] px-6 py-10 text-center sm:col-span-2 lg:col-span-3 lg:w-[calc(125%+2rem)] lg:py-14"><p className="font-vogue-sans text-[0.55rem] uppercase tracking-[0.16em] text-neutral-500">Advertisement</p><p className="font-editorial mt-4 text-2xl text-neutral-500">Mid-content sponsored placement</p></aside>}
-                <article>
-                  <div className="group relative aspect-[4/5] overflow-hidden bg-neutral-200"><img alt={`${result.name} at the ${result.event}`} className="h-full w-full object-cover object-[center_28%] grayscale transition duration-500 group-hover:scale-[1.02]" loading="lazy" src={result.image} /><button aria-label={`${saved.has(result.id) ? "Remove" : "Save"} ${result.name} photo`} className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-full bg-white text-xl shadow-sm" onClick={() => toggleSaved(result.id)} type="button"><Heart filled={saved.has(result.id)} /></button></div>
-                  <h3 className="font-editorial mt-2 text-xl leading-none">{result.name}</h3><p className="mt-1 text-xs text-neutral-600">{result.event}{result.year ? ` · ${result.year}` : ""}</p>
-                </article>
+                <DiscoveryImageCard
+                  action={
+                    <button
+                      aria-label={`${saved.has(result.assetId) ? "Remove" : "Save"} ${result.celebrityName} photo`}
+                      className="absolute right-3 top-3 z-10 flex size-9 items-center justify-center rounded-full bg-white text-xl shadow-sm transition-colors hover:bg-neutral-950 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950"
+                      onClick={() => toggleSaved(result.assetId)}
+                      type="button"
+                    >
+                      <Heart filled={saved.has(result.assetId)} />
+                    </button>
+                  }
+                  details={result}
+                  imageClassName="object-[center_28%] grayscale"
+                  onOpen={openImage}
+                >
+                  <h3 className="font-editorial mt-2 text-xl leading-none">
+                    {result.celebrityName}
+                  </h3>
+                  <p className="mt-1 text-xs text-neutral-600">
+                    {result.eventName ?? "Archive"}
+                    {result.year ? ` · ${result.year}` : ""}
+                  </p>
+                </DiscoveryImageCard>
               </Fragment>
             ))}
           </div>
@@ -118,6 +163,10 @@ export function SearchHubPage() {
         </section>
         <aside aria-label="Advertising" className="border-t border-neutral-200 pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0"><div className="sticky top-6"><p className="font-vogue-sans text-center text-[0.55rem] uppercase tracking-[0.16em] text-neutral-500">Advertisement</p><div className="mt-3 flex aspect-[4/5] items-center justify-center bg-[#f5f5f5] px-5 text-center"><p className="font-editorial text-xl text-neutral-400">Your ad here</p></div></div></aside>
       </div>
+      <DiscoveryImageDialog
+        details={selectedImage}
+        onDismiss={dismissImage}
+      />
     </div>
   );
 }
