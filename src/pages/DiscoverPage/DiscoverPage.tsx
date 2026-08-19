@@ -1,163 +1,149 @@
 import { FormEvent, Fragment, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { sampleArchiveImages } from "../../data/sampleArchive";
-
-type Result = {
-  id: string;
-  name: string;
+type Photo = {
+  id: number;
+  src: string;
+  alt: string;
   event: string;
-  year: number | null;
-  image: string;
+  year: string;
+  caption: string;
 };
 
-const pageSize = 15;
+const photos: Photo[] = [
+  { id: 1, src: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=1200&q=85", alt: "Portrait at a film premiere", event: "Film Premiere", year: "2026", caption: "Arriving at the London film premiere" },
+  { id: 2, src: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=1200&q=85", alt: "Portrait at an awards event", event: "Awards", year: "2026", caption: "The annual cinema awards in Los Angeles" },
+  { id: 3, src: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1200&q=85", alt: "Guest on the red carpet", event: "Met Gala", year: "2025", caption: "On the steps of the Met Gala" },
+  { id: 4, src: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=1200&q=85", alt: "Actor posing for photographers", event: "Film Premiere", year: "2025", caption: "A New York premiere appearance" },
+  { id: 5, src: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=1200&q=85", alt: "Celebrity portrait at a press event", event: "Press Tour", year: "2024", caption: "Portrait from the international press tour" },
+  { id: 6, src: "https://images.unsplash.com/photo-1502823403499-6ccfcf4fb453?auto=format&fit=crop&w=1200&q=85", alt: "Guest attending a fashion show", event: "Fashion Week", year: "2024", caption: "Front row during Paris Fashion Week" },
+  { id: 7, src: "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=1200&q=85", alt: "Actor at an awards ceremony", event: "Awards", year: "2023", caption: "The British film awards ceremony" },
+  { id: 8, src: "https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=1200&q=85", alt: "Portrait from a film festival", event: "Film Festival", year: "2023", caption: "Photographed at the Venice Film Festival" },
+  { id: 9, src: "https://images.unsplash.com/photo-1519345182560-3f2917c472ef?auto=format&fit=crop&w=1200&q=85", alt: "Guest at a fashion event", event: "Fashion Week", year: "2022", caption: "A show during London Fashion Week" },
+  { id: 10, src: "https://images.unsplash.com/photo-1521119989659-a83eee488004?auto=format&fit=crop&w=1200&q=85", alt: "Celebrity posing at a red carpet event", event: "Met Gala", year: "2026", caption: "A striking red carpet arrival" },
+  { id: 11, src: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=1200&q=85", alt: "Actor attending a press event", event: "Press Tour", year: "2025", caption: "Meeting the press ahead of a new release" },
+  { id: 12, src: "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=1200&q=85", alt: "Fashion week street-style portrait", event: "Fashion Week", year: "2026", caption: "Street style outside the season’s biggest show" },
+];
 
-const results: Result[] = sampleArchiveImages.flatMap((image) => {
-  if (!image.enrichment_state.search_ready) return [];
-  const usage = image.usages[0];
+const events = [...new Set(photos.map((photo) => photo.event))].sort();
+const years = [...new Set(photos.map((photo) => photo.year))].sort().reverse();
 
-  return image.celebrities
-    .filter((celebrity) => celebrity.status === "Approved")
-    .map((celebrity) => ({
-      id: image.image_id,
-      name: celebrity.canonical_name,
-      event: usage?.event.event_name ?? "Archive",
-      year: usage?.event.year ?? null,
-      image: image.image_url,
-    }));
-});
-
-const people = Array.from(
-  new Map(results.map((result) => [result.name, { name: result.name, image: result.image }])).values(),
-);
-
-function Heart({ filled = false }: { filled?: boolean }) {
-  return <span aria-hidden="true">{filled ? "♥" : "♡"}</span>;
+function Advertisement({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`flex items-center justify-center overflow-hidden bg-[#0c2944] px-7 text-center text-white ${compact ? "min-h-64 py-10" : "min-h-[44rem] py-14"}`}>
+      <div>
+        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-sky-200">The weekend edit</p>
+        <p className={`font-editorial mt-4 leading-none ${compact ? "text-5xl" : "text-4xl"}`}>Travel beautifully.</p>
+        <p className="mx-auto mt-4 max-w-xs text-sm leading-6 text-sky-100">Discover extraordinary stays, remarkable views, and a little more time for yourself.</p>
+        <span className="mt-7 inline-block border border-white px-5 py-3 text-[0.65rem] font-bold uppercase tracking-[0.16em]">Explore now</span>
+      </div>
+    </div>
+  );
 }
 
 export function DiscoverPage() {
-  const [query, setQuery] = useState("");
-  const [submittedQuery, setSubmittedQuery] = useState("Tracee Ellis Ross");
-  const [saved, setSaved] = useState<Set<string>>(new Set(["img_002"]));
-  const [showMorePeople, setShowMorePeople] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const query = searchParams.get("q")?.trim() || "Tom Holland";
+  const [searchValue, setSearchValue] = useState(query);
+  const [event, setEvent] = useState("All events");
+  const [year, setYear] = useState("All years");
 
-  const celebrityResults = useMemo(() => {
-    const normalizedQuery = submittedQuery.trim().toLocaleLowerCase();
-    return results.filter((item) => item.name.toLocaleLowerCase() === normalizedQuery);
-  }, [submittedQuery]);
+  const filteredPhotos = useMemo(
+    () => photos.filter((photo) => (event === "All events" || photo.event === event) && (year === "All years" || photo.year === year)),
+    [event, year],
+  );
 
-  const pageCount = Math.ceil(celebrityResults.length / pageSize);
-  const visibleResults = celebrityResults.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  function selectCelebrity(name: string) {
-    setQuery(name);
-    setSubmittedQuery(name);
-    setCurrentPage(1);
-  }
-
-  function submit(event: FormEvent) {
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmittedQuery(query.trim() || "Tracee Ellis Ross");
-    setCurrentPage(1);
-  }
-
-  function toggleSaved(id: string) {
-    setSaved((current) => {
-      const next = new Set(current);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    const nextQuery = searchValue.trim();
+    if (nextQuery) setSearchParams({ q: nextQuery });
   }
 
   return (
-    <div className="mx-auto max-w-[100rem] px-5 pb-24 sm:px-8 lg:px-12">
-      <section className="pb-9 pt-12 text-center sm:pt-[3.65rem]" aria-labelledby="discover-title">
-        <div className="relative">
-          <h1 className="font-editorial text-2xl font-light leading-8 tracking-normal" id="discover-title">Search the Image Archive</h1>
-          <a className="absolute right-0 top-1/2 hidden -translate-y-1/2 items-center gap-2 border border-neutral-950 px-4 py-3 text-xs font-bold xl:flex" href="/bookmarks"><Heart /> Saved {saved.size}</a>
-        </div>
-        <p className="font-vogue-sans mx-auto mt-4 max-w-5xl text-[0.8125rem] font-normal leading-[1.3125rem] tracking-normal">To get specific results from this AI-powered search, try descriptive searches including colors, fabrics, and features.</p>
-
-        <form className="relative mx-auto mt-[1.35rem] flex h-12 w-full border-[0.5px] border-[#e0e0e0] bg-white md:w-[50vw]" onSubmit={submit}>
-          <label className="sr-only" htmlFor="archive-search">Search the image archive</label>
-          <svg aria-hidden="true" className="ml-4 size-8 shrink-0 self-center" fill="none" viewBox="0 0 32 32"><path d="M24.5 14c0 5.799-4.701 10.5-10.5 10.5S3.5 19.799 3.5 14 8.201 3.5 14 3.5 24.5 8.201 24.5 14Zm-3.071 7.429L29 29" stroke="currentColor" strokeWidth="1.25"/></svg>
-          <input className="font-vogue-sans min-w-0 flex-1 px-4 text-[0.8125rem] font-normal outline-none placeholder:text-[#6f6f6f]" id="archive-search" onChange={(e) => setQuery(e.target.value)} placeholder={'Try searching "Tracee Ellis Ross"'} value={query} />
-          <button className="sr-only" type="submit">Search</button>
-        </form>
-
-        <div className="font-vogue-sans mt-[1.05rem] flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-[0.75rem] leading-5">
-          <span className="font-medium">Trending:</span>
-          {["Tracee Ellis Ross", "Emilia Clarke", "Catherine"].map((term) => (
-            <button className={`uppercase tracking-[0.15em] underline-offset-4 transition hover:underline ${submittedQuery === term ? "font-semibold underline" : "font-medium"}`} key={term} onClick={() => selectCelebrity(term)} type="button">{term}</button>
-          ))}
-        </div>
-      </section>
-
-      <section className="border border-[#ddd9d3] bg-[#f5f3f0] px-5 py-5 sm:px-7" aria-labelledby="people-title">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 className="font-editorial text-2xl" id="people-title">People</h2>
-          <p className="hidden text-[0.68rem] text-neutral-500 sm:block">Select a face to see every photo they’re in</p>
-        </div>
-        <div className="mt-4 flex gap-5 overflow-x-auto pb-1 sm:gap-8">
-          {people.slice(0, showMorePeople ? people.length : 3).map((person) => (
-            <button aria-pressed={submittedQuery === person.name} className="w-20 shrink-0 text-center" key={person.name} onClick={() => selectCelebrity(person.name)} type="button">
-              <img alt={person.name} className={`mx-auto size-16 rounded-full object-cover p-0.5 grayscale ${submittedQuery === person.name ? "border-2 border-neutral-950" : "border border-neutral-400"}`} src={person.image} />
-              <span className="font-editorial mt-2 flex h-8 items-start justify-center text-sm leading-4">{person.name}</span>
-              <span className="mt-0.5 block text-[0.62rem] text-neutral-500">{results.filter((result) => result.name === person.name).length} photos</span>
-            </button>
-          ))}
-          <button aria-expanded={showMorePeople} className="w-20 shrink-0 text-center" onClick={() => setShowMorePeople((current) => !current)} type="button">
-            <span className="mx-auto flex size-16 items-center justify-center rounded-full bg-neutral-900 text-sm font-bold text-white">{showMorePeople ? "−" : `+${people.length - 3}`}</span>
-            <span className="font-editorial mt-2 flex h-8 items-start justify-center text-sm leading-4">{showMorePeople ? "Show less" : "More people"}</span>
-            <span className="mt-0.5 block text-[0.62rem] text-neutral-500">{showMorePeople ? "Collapse" : "View all"}</span>
-          </button>
-        </div>
-      </section>
-
-      <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,4fr)_minmax(12rem,1fr)]">
-        <section aria-labelledby="results-title">
-          <div className="flex items-end justify-between border-b border-neutral-300 pb-3">
-            <div><h2 className="font-editorial text-3xl" id="results-title">{submittedQuery}</h2><p className="mt-0.5 text-xs text-neutral-600">{celebrityResults.length} {celebrityResults.length === 1 ? "image" : "images"} containing this person</p></div>
-            {celebrityResults.length > 0 && <a className="hidden text-[0.65rem] font-bold uppercase tracking-[0.08em] underline underline-offset-4 sm:block" href={`/celebrities/${submittedQuery.toLocaleLowerCase().replaceAll(" ", "-")}`}>View full celebrity archive →</a>}
-          </div>
-          <div className="mt-4 grid gap-x-4 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleResults.map((result, index) => (
-              <Fragment key={result.id}>
-                {index === 6 && (
-                  <aside aria-label="Sponsored content" className="relative z-10 border-y border-neutral-200 bg-[#f5f5f5] px-6 py-10 text-center sm:col-span-2 lg:col-span-3 lg:w-[calc(125%+2rem)] lg:py-14">
-                    <p className="font-vogue-sans text-[0.55rem] uppercase tracking-[0.16em] text-neutral-500">Advertisement</p>
-                    <p className="font-editorial mt-4 text-2xl text-neutral-500">Mid-content sponsored placement</p>
-                  </aside>
-                )}
-                <article>
-                  <div className="group relative aspect-[4/5] overflow-hidden bg-neutral-200">
-                    <img alt={`${result.name} at the ${result.event}`} className="h-full w-full object-cover object-[center_28%] grayscale transition duration-500 group-hover:scale-[1.02]" loading="lazy" src={result.image} />
-                    <button aria-label={`${saved.has(result.id) ? "Remove" : "Save"} ${result.name} photo`} className="absolute right-3 top-3 flex size-9 items-center justify-center rounded-full bg-white text-xl shadow-sm transition hover:scale-105" onClick={() => toggleSaved(result.id)} type="button"><Heart filled={saved.has(result.id)} /></button>
-                  </div>
-                  <h3 className="font-editorial mt-2 text-xl leading-none">{result.name}</h3>
-                  <p className="mt-1 text-xs text-neutral-600">{result.event}{result.year ? ` · ${result.year}` : ""}</p>
-                </article>
-              </Fragment>
-            ))}
-          </div>
-          {!visibleResults.length && <p className="py-20 text-center font-editorial text-2xl text-neutral-500">{celebrityResults.length ? "No images match these filters." : `No images found for “${submittedQuery}”.`}</p>}
-          {visibleResults.length > 0 && <nav aria-label="Search result pages" className="mt-10 flex justify-center gap-2 text-xs">
-            <button aria-label="Previous page" className="size-9 border border-neutral-300 disabled:cursor-not-allowed disabled:opacity-30" disabled={currentPage === 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} type="button">‹</button>
-            {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => <button aria-current={page === currentPage ? "page" : undefined} className={`size-9 border ${page === currentPage ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-300 hover:border-neutral-950"}`} key={page} onClick={() => setCurrentPage(page)} type="button">{page}</button>)}
-            <button aria-label="Next page" className="size-9 border border-neutral-300 disabled:cursor-not-allowed disabled:opacity-30" disabled={currentPage === pageCount} onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))} type="button">›</button>
-          </nav>}
-        </section>
-
-        <aside aria-label="Advertising" className="border-t border-neutral-200 pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-          <div className="sticky top-6">
-            <p className="font-vogue-sans text-center text-[0.55rem] uppercase tracking-[0.16em] text-neutral-500">Advertisement</p>
-            <div className="mt-3 flex aspect-[4/5] items-center justify-center bg-[#f5f5f5] px-5 text-center">
-              <p className="font-editorial text-xl text-neutral-400">Your ad here</p>
+    <div className="min-h-screen bg-white text-neutral-950">
+      <section className="border-b border-neutral-950 bg-white px-5 py-10 sm:px-8 sm:py-14 lg:px-12">
+        <div className="mx-auto max-w-[92rem]">
+          <p className="text-xs font-bold uppercase tracking-[0.2em]">Celebrity image archive</p>
+          <div className="mt-3 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h1 className="font-editorial text-5xl leading-none tracking-[-0.035em] sm:text-7xl">
+                Results for <span className="italic">“{query}”</span>
+              </h1>
+              <p className="mt-4 text-sm text-neutral-600">{filteredPhotos.length} photographs found</p>
             </div>
+            <form className="flex w-full max-w-lg border-b-2 border-neutral-950" onSubmit={submitSearch} role="search">
+              <label className="sr-only" htmlFor="archive-search">Search the image archive</label>
+              <input className="min-w-0 flex-1 bg-transparent py-3 text-lg outline-none placeholder:text-neutral-400" id="archive-search" onChange={(event) => setSearchValue(event.target.value)} placeholder="Search a celebrity" type="search" value={searchValue} />
+              <button aria-label="Submit search" className="px-3 text-2xl" type="submit">⌕</button>
+            </form>
           </div>
-        </aside>
+        </div>
+      </section>
+
+      <div className="sticky top-0 z-20 border-b border-neutral-300 bg-white/95 px-5 backdrop-blur sm:px-8 lg:px-12">
+        <div className="mx-auto flex max-w-[92rem] flex-wrap items-center gap-3 py-5 sm:gap-5">
+          <span className="mr-2 text-xs font-bold uppercase tracking-[0.18em]">Filter by</span>
+          <label className="relative">
+            <span className="sr-only">Event</span>
+            <select className="min-w-44 appearance-none rounded-full border border-neutral-950 bg-transparent py-2.5 pl-5 pr-11 text-sm font-semibold outline-offset-4" onChange={(event) => setEvent(event.target.value)} value={event}>
+              <option>All events</option>
+              {events.map((item) => <option key={item}>{item}</option>)}
+            </select>
+            <span aria-hidden="true" className="pointer-events-none absolute right-4 top-2.5">⌄</span>
+          </label>
+          <label className="relative">
+            <span className="sr-only">Year</span>
+            <select className="min-w-36 appearance-none rounded-full border border-neutral-950 bg-transparent py-2.5 pl-5 pr-11 text-sm font-semibold outline-offset-4" onChange={(event) => setYear(event.target.value)} value={year}>
+              <option>All years</option>
+              {years.map((item) => <option key={item}>{item}</option>)}
+            </select>
+            <span aria-hidden="true" className="pointer-events-none absolute right-4 top-2.5">⌄</span>
+          </label>
+          {(event !== "All events" || year !== "All years") && <button className="ml-auto text-xs font-bold uppercase tracking-[0.12em] underline underline-offset-4" onClick={() => { setEvent("All events"); setYear("All years"); }} type="button">Clear filters</button>}
+        </div>
       </div>
+
+      <main className="mx-auto max-w-[92rem] px-5 py-10 sm:px-8 sm:py-14 lg:px-12">
+        {filteredPhotos.length ? (
+          <div className="grid items-start gap-10 xl:grid-cols-[minmax(0,1fr)_16rem] xl:gap-8">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-8 lg:gap-y-16">
+              {filteredPhotos.map((photo, index) => (
+                <Fragment key={photo.id}>
+                  <article>
+                    <div className="aspect-[4/5] overflow-hidden bg-neutral-200">
+                      <img alt={photo.alt} className="h-full w-full object-cover transition duration-500 hover:scale-[1.02]" decoding="async" loading="lazy" src={photo.src} />
+                    </div>
+                    <div className="mt-4 flex items-start justify-between gap-4 border-t border-neutral-950 pt-3">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.16em]">{photo.event}</p>
+                        <p className="mt-2 text-base leading-snug">{photo.caption}</p>
+                      </div>
+                      <time className="text-sm tabular-nums text-neutral-600">{photo.year}</time>
+                    </div>
+                  </article>
+
+                  {index === 5 && (
+                    <aside aria-label="Advertisement" className="col-span-full border-y border-neutral-300 py-10">
+                      <p className="mb-5 text-center text-[0.65rem] uppercase tracking-[0.25em] text-neutral-500">Advertisement</p>
+                      <Advertisement compact />
+                    </aside>
+                  )}
+                </Fragment>
+              ))}
+            </div>
+
+            <aside aria-label="Advertisement" className="sticky top-24 hidden xl:block">
+              <p className="mb-4 text-center text-[0.65rem] uppercase tracking-[0.25em] text-neutral-500">Advertisement</p>
+              <Advertisement />
+            </aside>
+          </div>
+        ) : (
+          <div className="py-24 text-center">
+            <h2 className="font-editorial text-5xl">No photographs found</h2>
+            <p className="mt-4 text-neutral-600">Try clearing one of the filters.</p>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
