@@ -2,7 +2,7 @@ import type { RecognitionResult } from "../../../shared/contracts/recognition.js
 import type { AssetCelebrityAssociation } from "../../repositories/AssetRepository.js";
 import type { CelebrityCatalogEntry } from "../../repositories/CelebrityRepository.js";
 
-export const CELEBRITY_DECISION_ENGINE_VERSION = 1;
+export const CELEBRITY_DECISION_ENGINE_VERSION = 2;
 
 export interface CelebrityDecisionInput {
   approvalThreshold: number;
@@ -10,6 +10,7 @@ export interface CelebrityDecisionInput {
   recognitionResult: RecognitionResult | null;
   sourceText: {
     altText: string | null;
+    backstory: string | null;
     caption: string | null;
     title: string | null;
   };
@@ -18,7 +19,6 @@ export interface CelebrityDecisionInput {
 export interface CelebrityDecisionResult {
   associations: AssetCelebrityAssociation[];
   decisionEngineVersion: typeof CELEBRITY_DECISION_ENGINE_VERSION;
-  searchReady: boolean;
 }
 
 type EvidenceField = AssetCelebrityAssociation["evidenceFields"][number];
@@ -57,22 +57,25 @@ export function evaluateCelebrityDecisions({
     ]);
     const approvedByConfidence =
       face.confidence !== null && face.confidence >= approvalThreshold;
+    const decision =
+      approvedByConfidence || evidenceFields.length > 0 ? "APPROVED" : "NEEDS_REVIEW";
     mergeAssociation(associations, {
       confidence: face.confidence,
-      decision:
-        approvedByConfidence || evidenceFields.length > 0 ? "APPROVED" : "NEEDS_REVIEW",
+      decision,
       displayName,
       evidenceFields,
       identityKey,
       providerPersonId: face.providerPersonId,
+      searchDecision: decision,
       source: "recognition",
     });
   }
 
-  // Metadata-only inference is deliberately narrow. It is used only when the
-  // provider returned no usable celebrity candidate, and only when the text
-  // starts with a catalog identity followed by "in".
-  if (associations.size === 0 && recognitionResult !== null) {
+  // Metadata-only inference is deliberately narrow and catalog-gated. It can
+  // add the intended identity when recognition misses that celebrity, even if
+  // the provider returned unrelated candidates. The text must start with a
+  // catalog identity followed by "in".
+  if (recognitionResult !== null) {
     for (const field of ["title", "caption"] as const) {
       const catalogEntry = resolveMetadataInference(catalogIndex, sourceText[field]);
       if (!catalogEntry) {
@@ -86,6 +89,7 @@ export function evaluateCelebrityDecisions({
         evidenceFields: [field],
         identityKey: catalogEntry.slug,
         providerPersonId: null,
+        searchDecision: "APPROVED",
         source: "metadata-inference",
       });
     }
@@ -95,7 +99,6 @@ export function evaluateCelebrityDecisions({
   return {
     associations: result,
     decisionEngineVersion: CELEBRITY_DECISION_ENGINE_VERSION,
-    searchReady: result.some(({ decision }) => decision === "APPROVED"),
   };
 }
 
@@ -196,6 +199,10 @@ function mergeAssociation(
     ),
     identityKey: existing.identityKey,
     providerPersonId: existing.providerPersonId ?? candidate.providerPersonId,
+    searchDecision:
+      existing.searchDecision === "APPROVED" || candidate.searchDecision === "APPROVED"
+        ? "APPROVED"
+        : "NEEDS_REVIEW",
     source:
       existing.source === "recognition" || candidate.source === "recognition"
         ? "recognition"

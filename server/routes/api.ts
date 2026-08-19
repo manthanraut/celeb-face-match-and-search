@@ -3,6 +3,7 @@ import express, { Router } from "express";
 import type { RecognitionProviderName } from "../../shared/contracts/recognition.js";
 import { apiNotFoundHandler } from "../middleware/api-not-found.js";
 import { apiErrorHandler } from "../middleware/error-handler.js";
+import { PhotoSaveService } from "../services/PhotoSaveService.js";
 import { createAssetRouter, type AssetRouteService } from "./assets.js";
 import { createGalleryRouter, type GalleryRouteService } from "./galleries.js";
 import { createVersoSearchRouter, type VersoSearchRouteService } from "./search.js";
@@ -23,6 +24,7 @@ export function createApiRouter({
   versoSearchService,
 }: ApiRouterDependencies): Router {
   const apiRouter = Router();
+  const photoSaveService = new PhotoSaveService({ assetService, galleryService });
 
   apiRouter.use(express.json({ limit: "1mb" }));
 
@@ -52,7 +54,7 @@ export function createApiRouter({
     }
   });
 
-  apiRouter.use("/assets", createAssetRouter(assetService));
+  apiRouter.use("/assets", createAssetRouter(assetService, photoSaveService));
   apiRouter.use("/galleries", createGalleryRouter(galleryService));
   apiRouter.use(createVersoSearchRouter(versoSearchService));
 

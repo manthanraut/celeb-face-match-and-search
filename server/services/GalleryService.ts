@@ -1,4 +1,5 @@
 import type {
+  AssetEventMetadataResponse,
   GalleryAssetRemovalResponse,
   GalleryContextResponse,
   GalleryContextUpdate,
@@ -30,6 +31,15 @@ export class GalleryService {
     this.#usageRepository = usageRepository;
   }
 
+  async getAssetEventMetadata(assetId: string): Promise<AssetEventMetadataResponse> {
+    const existingAssetIds = await this.#assetRepository.findExistingAssetIds([assetId]);
+    if (!existingAssetIds.has(assetId)) {
+      throw new ApiError(404, "ASSET_NOT_FOUND", "The asset was not found.");
+    }
+
+    return { event: await this.#usageRepository.findLatestEventContext(assetId) };
+  }
+
   syncContext(galleryId: string, update: GalleryContextUpdate): Promise<GalleryContextResponse> {
     return this.#serialize(galleryId, async () => {
       const resolution = resolveGalleryEvent(update.tags);
@@ -38,6 +48,13 @@ export class GalleryService {
           400,
           "AMBIGUOUS_GALLERY_EVENT",
           "Gallery tags resolve to more than one event or year.",
+        );
+      }
+      if (update.published && resolution.status === "UNKNOWN") {
+        throw new ApiError(
+          400,
+          "PUBLISHED_GALLERY_EVENT_REQUIRED",
+          "A published gallery must include Event Metadata with an event and year.",
         );
       }
 

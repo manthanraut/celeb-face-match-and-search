@@ -10,7 +10,7 @@ describe("parseEnvironment", () => {
       MONGODB_DATABASE: "celeb_face_match",
       MONGODB_URI: "mongodb://127.0.0.1:27017",
       PORT: 3000,
-      RECOGNITION_APPROVAL_THRESHOLD: 90,
+      RECOGNITION_APPROVAL_THRESHOLD: 99,
       RECOGNITION_PROVIDER: "aws-rekognition",
       UPLOAD_DIR: "data/uploads",
     });
@@ -31,7 +31,7 @@ describe("parseEnvironment", () => {
   });
 
   it("uses the default threshold when an environment value is blank", () => {
-    expect(parseEnvironment({ RECOGNITION_APPROVAL_THRESHOLD: "" }).RECOGNITION_APPROVAL_THRESHOLD).toBe(90);
+    expect(parseEnvironment({ RECOGNITION_APPROVAL_THRESHOLD: "" }).RECOGNITION_APPROVAL_THRESHOLD).toBe(99);
   });
 
   it.each([

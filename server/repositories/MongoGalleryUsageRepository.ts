@@ -1,6 +1,10 @@
 import type { Collection, Db, Document } from "mongodb";
 
-import type { CanonicalEventId } from "../../shared/galleries.js";
+import {
+  canonicalEventNames,
+  type CanonicalEventId,
+  type GalleryEventContext,
+} from "../../shared/galleries.js";
 import type { AssetCelebrityAssociation } from "./AssetRepository.js";
 import { collectionNames } from "../database/indexes.js";
 import type { GalleryUsageRepository, SyncGalleryUsagesInput } from "./GalleryUsageRepository.js";
@@ -45,6 +49,26 @@ export class MongoGalleryUsageRepository implements GalleryUsageRepository, Vers
     this.#galleryUsages = database.collection<GalleryUsageDocument>(collectionNames.galleryUsages);
   }
 
+  async findLatestEventContext(assetId: string): Promise<GalleryEventContext | null> {
+    const usage = await this.#galleryUsages.findOne(
+      {
+        assetId,
+        event: { $ne: null },
+        year: { $ne: null },
+      },
+      { sort: { updatedAt: -1, galleryId: -1 } },
+    );
+    if (!usage?.event || usage.year === null) {
+      return null;
+    }
+
+    return {
+      id: usage.event,
+      name: usage.eventName ?? canonicalEventNames[usage.event],
+      year: usage.year,
+    };
+  }
+
   async syncGallery({
     assetIds,
     event,
@@ -80,6 +104,29 @@ export class MongoGalleryUsageRepository implements GalleryUsageRepository, Vers
     return result.deletedCount === 1;
   }
 
+  async countApprovedCelebrityAssets({
+    celebritySlug,
+    decisionEngineVersion,
+    filters,
+  }: {
+    celebritySlug: string;
+    decisionEngineVersion: number;
+    filters: VersoSearchFilters;
+  }): Promise<number> {
+    const [result] = await this.#galleryUsages
+      .aggregate<{ total: number }>([
+        { $match: createPublishedUsageFilter(filters) },
+        { $group: { _id: "$assetId" } },
+        { $project: { _id: 0, assetId: "$_id" } },
+        createApprovedAssetLookup(celebritySlug, decisionEngineVersion),
+        { $unwind: "$asset" },
+        { $count: "total" },
+      ])
+      .toArray();
+
+    return result?.total ?? 0;
+  }
+
   async findApprovedCelebrityUsages({
     celebritySlug,
     cursor,
@@ -97,61 +144,12 @@ export class MongoGalleryUsageRepository implements GalleryUsageRepository, Vers
       .aggregate<AggregatedGalleryUsage>([
         {
           $match: {
-            published: true,
-            ...(filters.event ? { event: filters.event } : {}),
-            ...(filters.year ? { year: filters.year } : {}),
+            ...createPublishedUsageFilter(filters),
             ...createCursorFilter(cursor),
           },
         },
         { $sort: { addedAt: -1, assetId: -1, galleryId: -1 } },
-        {
-          $lookup: {
-            as: "asset",
-            from: collectionNames.assets,
-            let: {
-              assetObjectId: {
-                $convert: {
-                  input: "$assetId",
-                  onError: null,
-                  onNull: null,
-                  to: "objectId",
-                },
-              },
-            },
-            pipeline: [
-              {
-                $match: {
-                  "enrichment.associations": {
-                    $elemMatch: {
-                      decision: "APPROVED",
-                      identityKey: celebritySlug,
-                    },
-                  },
-                  "enrichment.decisionEngineVersion": decisionEngineVersion,
-                  "enrichment.searchReady": true,
-                  "recognition.status": "SUCCEEDED",
-                  $expr: {
-                    $and: [
-                      { $eq: ["$_id", "$$assetObjectId"] },
-                      { $eq: ["$enrichment.recognitionRevision", "$recognition.revision"] },
-                      { $eq: ["$enrichment.sourceTextRevision", "$sourceText.revision"] },
-                    ],
-                  },
-                },
-              },
-              {
-                $project: {
-                  "enrichment.associations": 1,
-                  "ingest.originalFilename": 1,
-                  "sourceText.altText": 1,
-                  "sourceText.caption": 1,
-                  "sourceText.title": 1,
-                  "storage.mimeType": 1,
-                },
-              },
-            ],
-          },
-        },
+        createApprovedAssetLookup(celebritySlug, decisionEngineVersion),
         { $unwind: "$asset" },
         { $limit: limit + 1 },
       ])
@@ -163,6 +161,74 @@ export class MongoGalleryUsageRepository implements GalleryUsageRepository, Vers
       items: documents.slice(0, limit).map(toSearchRepositoryItem),
     };
   }
+}
+
+function createPublishedUsageFilter(filters: VersoSearchFilters): Document {
+  return {
+    published: true,
+    ...(filters.event ? { event: filters.event } : {}),
+    ...(filters.year ? { year: filters.year } : {}),
+  };
+}
+
+function createApprovedAssetLookup(
+  celebritySlug: string,
+  decisionEngineVersion: number,
+): Document {
+  return {
+    $lookup: {
+      as: "asset",
+      from: collectionNames.assets,
+      let: {
+        assetObjectId: {
+          $convert: {
+            input: "$assetId",
+            onError: null,
+            onNull: null,
+            to: "objectId",
+          },
+        },
+      },
+      pipeline: [
+        {
+          $match: {
+            "enrichment.associations": {
+              $elemMatch: {
+                identityKey: celebritySlug,
+                $or: [
+                  { searchDecision: "APPROVED" },
+                  {
+                    decision: "APPROVED",
+                    searchDecision: { $exists: false },
+                  },
+                ],
+              },
+            },
+            "enrichment.decisionEngineVersion": decisionEngineVersion,
+            "enrichment.hideFromSearch": { $ne: true },
+            "recognition.status": "SUCCEEDED",
+            $expr: {
+              $and: [
+                { $eq: ["$_id", "$$assetObjectId"] },
+                { $eq: ["$enrichment.recognitionRevision", "$recognition.revision"] },
+                { $eq: ["$enrichment.sourceTextRevision", "$sourceText.revision"] },
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            "enrichment.associations": 1,
+            "ingest.originalFilename": 1,
+            "sourceText.altText": 1,
+            "sourceText.caption": 1,
+            "sourceText.title": 1,
+            "storage.mimeType": 1,
+          },
+        },
+      ],
+    },
+  };
 }
 
 function createCursorFilter(cursor: VersoSearchCursor | undefined): Document {
@@ -187,7 +253,10 @@ function toSearchRepositoryItem(document: AggregatedGalleryUsage): VersoSearchRe
   return {
     addedAt: document.addedAt,
     assetId: document.assetId,
-    associations: document.asset.enrichment.associations,
+    associations: document.asset.enrichment.associations.map((association) => ({
+      ...association,
+      searchDecision: association.searchDecision ?? association.decision,
+    })),
     event: document.event ?? null,
     eventName: document.eventName ?? null,
     galleryId: document.galleryId,

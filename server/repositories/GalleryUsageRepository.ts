@@ -1,4 +1,4 @@
-import type { CanonicalEventId } from "../../shared/galleries.js";
+import type { CanonicalEventId, GalleryEventContext } from "../../shared/galleries.js";
 
 export interface GalleryUsageContext {
   event: CanonicalEventId | null;
@@ -14,6 +14,7 @@ export interface SyncGalleryUsagesInput extends GalleryUsageContext {
 }
 
 export interface GalleryUsageRepository {
+  findLatestEventContext(assetId: string): Promise<GalleryEventContext | null>;
   removeAsset(galleryId: string, assetId: string): Promise<boolean>;
   syncGallery(input: SyncGalleryUsagesInput): Promise<void>;
 }

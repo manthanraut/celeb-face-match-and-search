@@ -261,6 +261,11 @@ describeWithMongo("MongoDB foundation", () => {
     });
     expect(inserted).toMatchObject({ addedAt: updatedAt });
     await expect(assets!.findById(first.id)).resolves.toEqual(first);
+    await expect(galleryUsages!.findLatestEventContext(first.id)).resolves.toEqual({
+      id: "oscars",
+      name: "Oscars",
+      year: 2027,
+    });
 
     await expect(galleryUsages!.removeAsset("gallery-1", first.id)).resolves.toBe(true);
     await expect(galleryUsages!.removeAsset("gallery-1", first.id)).resolves.toBe(false);
@@ -295,14 +300,18 @@ describeWithMongo("MongoDB foundation", () => {
     const createRetrievalAsset = async ({
       decision = "APPROVED",
       decisionEngineVersion = 1,
+      hideFromSearch = false,
       identityKey = "rihanna",
       recognitionRevision = 2,
+      searchDecision = decision,
       sourceTextRevision = 1,
     }: {
       decision?: "APPROVED" | "NEEDS_REVIEW";
       decisionEngineVersion?: number;
+      hideFromSearch?: boolean;
       identityKey?: string;
       recognitionRevision?: number;
+      searchDecision?: "APPROVED" | "NEEDS_REVIEW";
       sourceTextRevision?: number;
     } = {}) =>
       assets!.insert(
@@ -316,13 +325,14 @@ describeWithMongo("MongoDB foundation", () => {
                 evidenceFields: [],
                 identityKey,
                 providerPersonId: `person-${identityKey}`,
+                searchDecision,
                 source: "recognition",
               },
             ],
             decisionEngineVersion,
             evaluatedAt: new Date("2027-05-04T11:00:00.000Z"),
+            hideFromSearch,
             recognitionRevision,
-            searchReady: decision === "APPROVED",
             sourceTextRevision,
           },
           recognition: {
@@ -336,9 +346,18 @@ describeWithMongo("MongoDB foundation", () => {
     const staleRecognition = await createRetrievalAsset({ recognitionRevision: 1 });
     const staleMetadata = await createRetrievalAsset({ sourceTextRevision: 2 });
     const staleEngine = await createRetrievalAsset({ decisionEngineVersion: 0 });
+    const hidden = await createRetrievalAsset({ hideFromSearch: true });
+    const searchBlocked = await createRetrievalAsset({ searchDecision: "NEEDS_REVIEW" });
     const otherCelebrity = await createRetrievalAsset({ identityKey: "zendaya" });
     const unpublished = await createRetrievalAsset();
     const addedAt = new Date("2027-05-04T12:00:00.000Z");
+
+    // Associations written before searchDecision was introduced remain
+    // searchable by their equivalent approval decision.
+    await database!.collection(collectionNames.assets).updateOne(
+      { _id: ObjectId.createFromHexString(approved.id) },
+      { $unset: { "enrichment.associations.$[].searchDecision": "" } },
+    );
 
     await galleryUsages!.syncGallery({
       assetIds: [
@@ -347,6 +366,8 @@ describeWithMongo("MongoDB foundation", () => {
         staleRecognition.id,
         staleMetadata.id,
         staleEngine.id,
+        hidden.id,
+        searchBlocked.id,
         otherCelebrity.id,
       ],
       event: "met-gala",
@@ -386,6 +407,24 @@ describeWithMongo("MongoDB foundation", () => {
         },
       ],
     });
+
+    await galleryUsages!.syncGallery({
+      assetIds: [approved.id],
+      event: "met-gala",
+      eventName: "Met Gala",
+      galleryId: "secondary-published-gallery",
+      published: true,
+      updatedAt: new Date("2027-05-04T13:00:00.000Z"),
+      year: 2027,
+    });
+
+    await expect(
+      galleryUsages!.countApprovedCelebrityAssets({
+        celebritySlug: "rihanna",
+        decisionEngineVersion: 1,
+        filters: {},
+      }),
+    ).resolves.toBe(1);
   });
 
   it("filters and paginates celebrity usages with deterministic tie breaking", async () => {
@@ -401,13 +440,14 @@ describeWithMongo("MongoDB foundation", () => {
                 evidenceFields: ["title"],
                 identityKey: "rihanna",
                 providerPersonId: "person-rihanna",
+                searchDecision: "APPROVED",
                 source: "recognition",
               },
             ],
             decisionEngineVersion: 1,
             evaluatedAt: new Date("2027-05-04T11:00:00.000Z"),
+            hideFromSearch: false,
             recognitionRevision: 2,
-            searchReady: true,
             sourceTextRevision: 1,
           },
           recognition: { revision: 2, status: "SUCCEEDED" },
@@ -461,6 +501,16 @@ describeWithMongo("MongoDB foundation", () => {
       filters: { year: 2026 },
       limit: 20,
     });
+    const metGalaCount = await galleryUsages!.countApprovedCelebrityAssets({
+      celebritySlug: "rihanna",
+      decisionEngineVersion: 1,
+      filters: { event: "met-gala", year: 2027 },
+    });
+    const yearFilteredCount = await galleryUsages!.countApprovedCelebrityAssets({
+      celebritySlug: "rihanna",
+      decisionEngineVersion: 1,
+      filters: { year: 2026 },
+    });
 
     expect(firstPage).toMatchObject({
       hasMore: true,
@@ -474,6 +524,8 @@ describeWithMongo("MongoDB foundation", () => {
       hasMore: false,
       items: [{ assetId: oscars.id, event: "oscars", year: 2026 }],
     });
+    expect(metGalaCount).toBe(2);
+    expect(yearFilteredCount).toBe(1);
   });
 
   it("round-trips asset records and supports batch lookup", async () => {
@@ -517,6 +569,19 @@ describeWithMongo("MongoDB foundation", () => {
     expect(byClientAssetId.get(first.ingest.clientAssetId)).toEqual(first);
     expect(byClientAssetId.get(second.ingest.clientAssetId)).toEqual(second);
     await expect(assets!.findByClientAssetIds([])).resolves.toEqual(new Map());
+  });
+
+  it("normalizes backstory to null for assets created before the field existed", async () => {
+    const input = createAsset();
+    const { backstory: _backstory, ...legacySourceText } = input.sourceText;
+    const result = await database!.collection(collectionNames.assets).insertOne({
+      ...input,
+      sourceText: legacySourceText,
+    });
+
+    await expect(assets!.findById(result.insertedId.toHexString())).resolves.toMatchObject({
+      sourceText: { backstory: null },
+    });
   });
 
   it("translates only duplicate client asset IDs to the repository error", async () => {
@@ -689,7 +754,10 @@ describeWithMongo("MongoDB foundation", () => {
     expect(retried?.recognition).not.toHaveProperty("lastError");
     expect(retried?.recognition).not.toHaveProperty("normalizedResult");
     expect(retried?.recognition).not.toHaveProperty("rawResult");
-    expect(retried?.enrichment).toEqual({ associations: [], searchReady: false });
+    expect(retried?.enrichment).toEqual({
+      associations: [],
+      hideFromSearch: false,
+    });
     await expect(assets!.retryRecognition(inserted.id, retriedAt, "fake")).resolves.toEqual({
       outcome: "NOT_RETRYABLE",
       status: "QUEUED",
@@ -748,7 +816,7 @@ describeWithMongo("MongoDB foundation", () => {
   it("applies enrichment only to the recognition and metadata revisions it evaluated", async () => {
     const inserted = await assets!.insert(
       createAsset({
-        enrichment: { associations: [], searchReady: false },
+        enrichment: { associations: [], hideFromSearch: false },
         recognition: {
           normalizedResult: {
             faces: [],
@@ -768,8 +836,8 @@ describeWithMongo("MongoDB foundation", () => {
       associations: [],
       decisionEngineVersion: 1,
       evaluatedAt,
+      hideFromSearch: false,
       recognitionRevision: 2,
-      searchReady: false,
       sourceTextRevision: 1,
     };
 
@@ -800,7 +868,7 @@ describeWithMongo("MongoDB foundation", () => {
   it("saves metadata and enrichment atomically and rejects a stale editorial revision", async () => {
     const inserted = await assets!.insert(
       createAsset({
-        enrichment: { associations: [], searchReady: false },
+        enrichment: { associations: [], hideFromSearch: false },
         recognition: {
           normalizedResult: {
             faces: [],
@@ -831,13 +899,14 @@ describeWithMongo("MongoDB foundation", () => {
           evidenceFields: ["title" as const],
           identityKey: "rihanna",
           providerPersonId: null,
+          searchDecision: "APPROVED" as const,
           source: "metadata-inference" as const,
         },
       ],
       decisionEngineVersion: 1,
       evaluatedAt: updatedAt,
+      hideFromSearch: true,
       recognitionRevision: 2,
-      searchReady: true,
       sourceTextRevision: 2,
     };
     const update = {
@@ -920,6 +989,7 @@ function createAsset(
     },
     sourceText: {
       altText: "A celebrity arriving at the gala",
+      backstory: null,
       caption: "Arrival on the Met Gala carpet",
       revision: 1,
       title: "Met Gala arrival",
@@ -943,10 +1013,11 @@ function createAsset(
           evidenceFields: ["title", "caption"],
           identityKey: "example-celebrity",
           providerPersonId: "person-123",
+          searchDecision: "APPROVED",
           source: "recognition",
         },
       ],
-      searchReady: true,
+      hideFromSearch: false,
     },
     createdAt,
     updatedAt: createdAt,

@@ -142,7 +142,6 @@ export class MongoAssetRepository
         $inc: { "recognition.revision": 1 },
         $set: {
           "enrichment.associations": [],
-          "enrichment.searchReady": false,
           "recognition.attemptNumber": 0,
           "recognition.availableAt": now,
           "recognition.provider": providerName,
@@ -154,6 +153,7 @@ export class MongoAssetRepository
           "enrichment.decisionEngineVersion": "",
           "enrichment.evaluatedAt": "",
           "enrichment.recognitionRevision": "",
+          "enrichment.searchReady": "",
           "enrichment.sourceTextRevision": "",
           "recognition.completedAt": "",
           "recognition.lastError": "",
@@ -468,6 +468,18 @@ function toAssetRecord(document: WithId<AssetDocument>): AssetRecord {
   return {
     id: _id.toHexString(),
     ...asset,
+    enrichment: {
+      ...asset.enrichment,
+      associations: asset.enrichment.associations.map((association) => ({
+        ...association,
+        searchDecision: association.searchDecision ?? association.decision,
+      })),
+      hideFromSearch: asset.enrichment.hideFromSearch ?? false,
+    },
+    sourceText: {
+      ...asset.sourceText,
+      backstory: asset.sourceText.backstory ?? null,
+    },
   };
 }
 

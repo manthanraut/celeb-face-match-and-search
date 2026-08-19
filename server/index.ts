@@ -2,6 +2,7 @@ import path from "node:path";
 
 import { createApp } from "./app.js";
 import { environment } from "./config/env.js";
+import { ensureDemoCelebrityCatalog } from "./database/demoCelebrityCatalog.js";
 import { MongoDatabase } from "./database/MongoDatabase.js";
 import { ensureDatabaseIndexes } from "./database/indexes.js";
 import { configureFrontend } from "./frontend.js";
@@ -77,7 +78,12 @@ async function main(): Promise<void> {
         });
       },
       database,
-      ensureDatabaseIndexes,
+      ensureDatabaseIndexes: async (connectedDatabase) => {
+        await ensureDatabaseIndexes(connectedDatabase);
+        if (environment.NODE_ENV === "development") {
+          await ensureDemoCelebrityCatalog(connectedDatabase);
+        }
+      },
       listen: (app) => listen(app, environment.PORT),
     });
   } catch (error) {

@@ -4,10 +4,18 @@ import { assetIdSchema } from "../../shared/assets.js";
 import { galleryContextUpdateSchema, galleryIdSchema } from "../../shared/galleries.js";
 import type { GalleryService } from "../services/GalleryService.js";
 
-export type GalleryRouteService = Pick<GalleryService, "removeAsset" | "syncContext">;
+export type GalleryRouteService = Pick<
+  GalleryService,
+  "getAssetEventMetadata" | "removeAsset" | "syncContext"
+>;
 
 export function createGalleryRouter(galleryService: GalleryRouteService): Router {
   const galleryRouter = Router();
+
+  galleryRouter.get("/assets/:assetId/event-metadata", async (request, response) => {
+    const assetId = assetIdSchema.parse(request.params.assetId);
+    response.json(await galleryService.getAssetEventMetadata(assetId));
+  });
 
   galleryRouter.put("/:galleryId/context", async (request, response) => {
     const galleryId = galleryIdSchema.parse(request.params.galleryId);

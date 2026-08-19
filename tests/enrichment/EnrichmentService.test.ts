@@ -12,7 +12,7 @@ function createAsset(overrides: Partial<AssetRecord> = {}): AssetRecord {
   return {
     id: ASSET_ID,
     createdAt: NOW,
-    enrichment: { associations: [], searchReady: false },
+    enrichment: { associations: [], hideFromSearch: false },
     ingest: {
       clientAssetId: "11111111-1111-4111-8111-111111111111",
       originalFilename: "arrival.jpg",
@@ -44,6 +44,7 @@ function createAsset(overrides: Partial<AssetRecord> = {}): AssetRecord {
     },
     sourceText: {
       altText: "A red carpet arrival",
+      backstory: null,
       caption: "A guest arrives",
       revision: 1,
       title: "Met Gala arrival",
@@ -97,7 +98,7 @@ function createHarness(initialAsset: AssetRecord | null = createAsset()) {
     ),
   };
   const service = new EnrichmentService({
-    approvalThreshold: 90,
+    approvalThreshold: 99,
     assetRepository,
     celebrityRepository,
     clock: () => NOW,
@@ -120,12 +121,13 @@ describe("EnrichmentService", () => {
           expect.objectContaining({
             decision: "NEEDS_REVIEW",
             displayName: "Rihanna",
+            searchDecision: "NEEDS_REVIEW",
           }),
         ],
-        decisionEngineVersion: 1,
+        decisionEngineVersion: 2,
         evaluatedAt: NOW,
+        hideFromSearch: false,
         recognitionRevision: 2,
-        searchReady: false,
         sourceTextRevision: 1,
       },
       expectedRecognitionRevision: 2,
@@ -144,6 +146,7 @@ describe("EnrichmentService", () => {
 
     expect(updated.sourceText).toEqual({
       altText: "A red carpet arrival",
+      backstory: null,
       caption: "A guest arrives",
       revision: 2,
       title: "Rihanna in Marc Jacobs",
@@ -154,10 +157,10 @@ describe("EnrichmentService", () => {
         expect.objectContaining({
           decision: "APPROVED",
           evidenceFields: ["title"],
+          searchDecision: "APPROVED",
         }),
       ],
       recognitionRevision: 2,
-      searchReady: true,
       sourceTextRevision: 2,
     });
     expect(enrichmentRepository.saveMetadataAndEnrichment).toHaveBeenCalledWith(
@@ -167,6 +170,56 @@ describe("EnrichmentService", () => {
         expectedSourceTextRevision: 1,
       }),
     );
+  });
+
+  it("persists the search visibility override while preserving recognition decisions", async () => {
+    const { service } = createHarness();
+
+    const updated = await service.updateMetadata(ASSET_ID, { hideFromSearch: true });
+
+    expect(updated.enrichment).toMatchObject({
+      associations: [expect.objectContaining({
+        decision: "NEEDS_REVIEW",
+        searchDecision: "NEEDS_REVIEW",
+      })],
+      hideFromSearch: true,
+    });
+  });
+
+  it("normalizes backstory updates without using them as celebrity evidence", async () => {
+    const { service } = createHarness();
+
+    const updated = await service.updateMetadata(ASSET_ID, {
+      backstory: "  Rihanna in Marc Jacobs\r\nPhotographed before the gala.  ",
+    });
+
+    expect(updated.sourceText.backstory).toBe(
+      "Rihanna in Marc Jacobs\nPhotographed before the gala.",
+    );
+    expect(updated.enrichment.associations[0]).toMatchObject({
+      decision: "NEEDS_REVIEW",
+      evidenceFields: [],
+      searchDecision: "NEEDS_REVIEW",
+    });
+  });
+
+  it("clears a whitespace-only backstory while preserving omitted metadata", async () => {
+    const asset = createAsset({
+      sourceText: {
+        ...createAsset().sourceText,
+        backstory: "Existing editorial context",
+      },
+    });
+    const { service } = createHarness(asset);
+
+    const updated = await service.updateMetadata(ASSET_ID, { backstory: "  \n  " });
+
+    expect(updated.sourceText).toMatchObject({
+      altText: asset.sourceText.altText,
+      backstory: null,
+      caption: asset.sourceText.caption,
+      title: asset.sourceText.title,
+    });
   });
 
   it("does not infer metadata or query the catalog before recognition succeeds", async () => {
@@ -186,7 +239,7 @@ describe("EnrichmentService", () => {
       caption: "Rihanna in Marc Jacobs",
     });
 
-    expect(updated.enrichment).toMatchObject({ associations: [], searchReady: false });
+    expect(updated.enrichment).toMatchObject({ associations: [] });
     expect(celebrityRepository.list).not.toHaveBeenCalled();
   });
 
@@ -234,7 +287,7 @@ describe("EnrichmentService", () => {
 
     await expect(service.evaluateNextPending()).resolves.toBe(true);
 
-    expect(enrichmentRepository.findPendingEnrichmentAsset).toHaveBeenCalledWith(1);
+    expect(enrichmentRepository.findPendingEnrichmentAsset).toHaveBeenCalledWith(2);
     expect(enrichmentRepository.applyEnrichment).toHaveBeenCalledTimes(1);
   });
 });

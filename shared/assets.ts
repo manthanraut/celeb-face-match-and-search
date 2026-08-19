@@ -9,6 +9,7 @@ export const MAX_ASSET_UPLOAD_FILES = 10;
 export const MAX_ASSET_UPLOAD_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 export const MAX_ASSET_IMAGE_DIMENSION = 10_000;
 export const MAX_ASSET_IMAGE_PIXELS = 50_000_000;
+export const MAX_ASSET_BACKSTORY_LENGTH = 5_000;
 
 export const assetIdSchema = z.string().regex(/^[a-f\d]{24}$/i, "Asset ID must be a 24-character hexadecimal value.");
 export const clientAssetIdSchema = z.string().uuid();
@@ -25,6 +26,7 @@ export const assetSourceTextSchema = z.object({
   title: z.string().max(500).nullable(),
   caption: z.string().max(5_000).nullable(),
   altText: z.string().max(2_000).nullable(),
+  backstory: z.string().max(MAX_ASSET_BACKSTORY_LENGTH).nullable(),
   revision: z.number().int().positive(),
 });
 
@@ -41,7 +43,6 @@ export const assetSchema = z.object({
   sizeBytes: z.number().int().positive(),
   sourceText: assetSourceTextSchema,
   recognitionStatus: assetRecognitionStatusSchema,
-  searchReady: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   links: assetLinksSchema,
@@ -71,6 +72,7 @@ export const assetCelebrityAssociationSchema = z.object({
   evidenceFields: z.array(z.enum(["title", "caption"])),
   identityKey: z.string().min(1),
   providerPersonId: z.string().min(1).nullable(),
+  searchDecision: z.enum(["APPROVED", "NEEDS_REVIEW"]),
   source: z.enum(["recognition", "metadata-inference"]),
 });
 
@@ -78,8 +80,8 @@ export const assetEnrichmentSchema = z.object({
   associations: z.array(assetCelebrityAssociationSchema),
   decisionEngineVersion: z.number().int().positive().nullable(),
   evaluatedAt: z.string().datetime().nullable(),
+  hideFromSearch: z.boolean(),
   recognitionRevision: z.number().int().positive().nullable(),
-  searchReady: z.boolean(),
   sourceTextRevision: z.number().int().positive().nullable(),
 });
 
@@ -93,6 +95,8 @@ export const assetMetadataUpdateSchema = z
     title: z.string().max(500).nullable().optional(),
     caption: z.string().max(5_000).nullable().optional(),
     altText: z.string().max(2_000).nullable().optional(),
+    backstory: z.string().max(MAX_ASSET_BACKSTORY_LENGTH).nullable().optional(),
+    hideFromSearch: z.boolean().optional(),
   })
   .strict()
   .refine(

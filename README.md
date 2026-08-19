@@ -12,7 +12,7 @@ and Express API from one TypeScript project and is configured for AWS Rekognitio
 - Responsive Met Gala 2026 editorial gallery
 - CTA from the gallery to celebrity image discovery
 - Copilot-simulated photo selection with drag and drop, multi-select, and preview cards
-- Copilot-style photo details, editable metadata, taxonomy, and crop previews
+- Copilot-style photo uploads and editable title, caption, alt text, and backstory
 - Placeholder routes for search, bookmarks, celebrity archives, and editor tools
 - React and Express served by one development process
 - Shared, validated recognition-result contract
@@ -38,8 +38,9 @@ Open application
 
 Open /admin/photos/new
     → Select one or more local photos
+    → Upload the photos to the server
     → Open Edit Photo in a new tab
-    → Review the Copilot-style photo details page
+    → Review and save metadata on the Copilot-style photo details page
 ```
 
 The backend workflow from upload through celebrity search and archive retrieval is ready.
@@ -144,8 +145,8 @@ Stop the development server with `Ctrl+C`.
 | `/bookmarks` | Placeholder | Saved photographs |
 | `/admin` | Placeholder | Internal dashboard |
 | `/admin/photos` | Placeholder | Photo library |
-| `/admin/photos/new` | Ready | Local image selection and preview-card grid |
-| `/admin/photos/:assetId` | Ready | Copilot-style photo metadata, taxonomy, and crop previews |
+| `/admin/photos/new` | Ready | Select and upload JPEG or PNG assets to the server |
+| `/admin/photos/:assetId` | Ready | Load and edit server-backed photo metadata, including backstory |
 | `/api/health` | Ready | API and provider health check |
 | `/api/ready` | Ready | MongoDB-backed application readiness check |
 | `GET /api/assets` | Ready | Paginated photo-library assets |
@@ -254,34 +255,39 @@ state return `409` because only a terminal failure can be retried manually.
 
 ## Metadata Enrichment and Decisions
 
-Decision engine version 1 uses the configured `RECOGNITION_APPROVAL_THRESHOLD`, which defaults
-to `90`. Each recognized celebrity produces one of two persisted decisions:
+Decision engine version 2 uses the configured `RECOGNITION_APPROVAL_THRESHOLD`, which defaults
+to `99`. Each recognized celebrity produces one of two persisted decisions:
 
 | Scenario | Decision |
 | --- | --- |
 | Confidence is at or above the threshold | `APPROVED` |
 | Confidence is below the threshold and the celebrity appears in title or caption | `APPROVED` |
 | Confidence is below the threshold without title or caption evidence | `NEEDS_REVIEW` |
-| Recognition returns no celebrity and `X in Y` resolves `X` through the celebrity catalog | `APPROVED` metadata inference |
-| Recognition returns no celebrity and `X` is not in the catalog | No association |
+| Recognition misses the celebrity named by catalog-backed `X in Y`, including when unrelated candidates are returned | `APPROVED` metadata inference |
+| Recognition misses the celebrity and `X` is not in the catalog | No association |
 
-Alt text is stored but is not identity evidence. Review candidates remain persisted, while
-`searchReady` becomes `true` only when at least one association is approved. Multiple faces are
-evaluated independently and repeated matches for the same celebrity are consolidated.
+Alt text and backstory are stored but are not identity evidence. Each celebrity association stores
+its own `searchDecision` as `APPROVED` or `NEEDS_REVIEW`; there is no image-level search decision.
+Multiple faces are evaluated independently and repeated matches for the same celebrity are consolidated.
+
+The Copilot photo page also exposes a **Hide from search** switch. It is off by default and is
+saved through the same metadata endpoint as `hideFromSearch`. A hidden asset keeps its recognition
+decisions but is excluded from Verso search until the switch is turned off and saved.
 
 Save one or more editorial fields with:
 
 ```bash
 curl -X PATCH http://localhost:3000/api/assets/<asset-id>/metadata \
   -H 'Content-Type: application/json' \
-  -d '{"title":"Rihanna in Marc Jacobs","caption":"Rihanna arrives at the Met Gala"}'
+  -d '{"title":"Rihanna in Marc Jacobs","caption":"Rihanna arrives at the Met Gala","backstory":"Photographed shortly before the arrival.","hideFromSearch":false}'
 ```
 
 Every metadata save recalculates decisions from the stored recognition result without calling
 Rekognition again. Source-text and recognition revisions are checked in the same atomic MongoDB
 write, so a concurrent recognition completion or editorial save cannot publish stale decisions.
-Metadata-only `X in Y` inference is intentionally catalog-gated; Phase 7 will provide the demo
-catalog seed command.
+Metadata-only `X in Y` inference is intentionally catalog-gated. In development, startup
+idempotently inserts a small demo catalog containing Doja Cat and the prototype's other supported
+identities without overwriting existing records.
 
 ## Gallery Context and Event Enrichment
 
@@ -299,9 +305,10 @@ curl -X PUT http://localhost:3000/api/galleries/met-gala-2027/context \
 
 The endpoint accepts up to 500 unique asset IDs and verifies that each asset exists before
 changing gallery usages. It recognizes Met Gala, Grammys, Oscars, Golden Globes, and Vogue
-World when a known event and a year from 1900 through 2199 appear in the same tag. Unsupported
-tags retain the gallery relationship without event context. Conflicting event or year tags
-return `400` rather than choosing one based on tag order.
+World when a known event and a year from 1900 through 2199 appear in the same tag. An unpublished
+snapshot may retain gallery relationships without event context. A published snapshot without
+a supported event and year returns `400 PUBLISHED_GALLERY_EVENT_REQUIRED`. Conflicting event or
+year tags return `400` rather than choosing one based on tag order.
 
 Each asset-and-gallery pair is upserted idempotently. Resending a snapshot preserves its
 original `addedAt`, while tag and publication changes update all current usages and omitted
@@ -312,6 +319,61 @@ event can also call:
 DELETE /api/galleries/<gallery-id>/assets/<asset-id>
 ```
 
+On the Copilot photo page, **Image gets added in content** shows a two-second loading state and
+selects a random supported event and year locally. The generated values are persisted as a published
+image usage only when the global **Save** button is clicked. After saving, **Event Metadata** is
+loaded back from MongoDB on refresh, and the same usage event/year powers the existing Verso search
+filters.
+
+## Vogue XLSX Importer
+
+The repository includes a dry-run-first importer for the Anne Hathaway and Rihanna workbooks:
+
+```bash
+npm run import:vogue
+```
+
+The dry run reads the default files from `~/Downloads`, ignores repeated `rel_id` values, and prints
+all deterministic Event Metadata assignments. It does not access the server, download images, call
+AWS, or write data.
+
+Review the plan, start or restart the development server so the Anne Hathaway catalog entry is
+seeded, confirm `/api/health` reports `aws-rekognition`, and then execute the import:
+
+```bash
+npm run import:vogue -- --execute
+```
+
+The default server URL is `http://10.176.96.109:3000`. Override paths or the server URL when needed:
+
+```bash
+npm run import:vogue -- --execute \
+  --base-url http://localhost:3000 \
+  --anne '/path/to/Images from Vogue for Anne Hathaway.xlsx' \
+  --rihanna '/path/to/Images from Vogue for Rihanna.xlsx'
+```
+
+Importer behavior:
+
+- Uses a stable client asset UUID derived from `rel_id`, so rerunning an unchanged import reuses the
+  original asset instead of creating a duplicate.
+- Keeps the first row for duplicate `rel_id` values. The current workbooks produce 78 unique images.
+- Deterministically assigns exactly eight images blank Event Metadata. These images receive no
+  gallery usage and therefore do not appear in gallery-backed search.
+- Selects event and year independently for the remaining images using separate deterministic hashes.
+  Each of the four values has a 25% probability; final counts do not have to be equal.
+- Preserves spreadsheet title and caption, generates factual alt text and backstory, and saves
+  `hideFromSearch: false` through the combined editorial endpoint.
+- Downloads and uploads images sequentially, then polls asset detail until AWS recognition and
+  enrichment finish. The worker already performs up to three provider attempts, so the importer
+  reports terminal failures without automatically requeueing them.
+- Exits nonzero when an upload fails, recognition fails or times out, or the expected celebrity does
+  not receive an `APPROVED` search decision.
+
+The import command defaults to a 5-second polling interval and a 60-minute recognition timeout.
+Use `--poll-interval-ms` and `--timeout-minutes` to override them. Run `npm run import:vogue -- --help`
+for the complete command reference.
+
 ## Verso Search and Celebrity Archives
 
 Search uses exact normalized celebrity names and aliases from the celebrity catalog. It deliberately
@@ -321,9 +383,11 @@ does not perform semantic ranking or designer lookup in this phase:
 curl 'http://localhost:3000/api/search?query=Robyn%20Rihanna%20Fenty&event=met-gala&year=2027&limit=20'
 ```
 
-When the query resolves, the response includes the canonical celebrity, matching image records, and
-an opaque `nextCursor`. An unknown celebrity returns an empty result with `celebrity: null`. Alias
-collisions return `409` instead of selecting a celebrity arbitrarily.
+When the query resolves, the response includes the canonical celebrity, matching image records,
+`total_count`, and an opaque `nextCursor`. `total_count` is the number of distinct matching images
+across all pages for the current event/year filters. Hidden images are excluded. An unknown celebrity
+returns an empty result with `celebrity: null` and `total_count: 0`. Alias collisions return `409`
+instead of selecting a celebrity arbitrarily.
 
 Open the reusable cross-event archive with the canonical slug:
 
@@ -337,7 +401,7 @@ tie-breakers. Cursors are bound to the celebrity and filters, so they cannot be 
 different result set.
 
 Retrieval starts from published gallery usages and returns only assets whose requested celebrity
-association is `APPROVED`. The stored decision-engine version, recognition revision, and source-text
+association has `searchDecision: APPROVED`. The stored decision-engine version, recognition revision, and source-text
 revision must still match the asset's current state. Review-only, stale, draft, and failed-recognition
 records are excluded.
 
@@ -353,7 +417,7 @@ AWS_REGION=us-east-1
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DATABASE=celeb_face_match
 UPLOAD_DIR=data/uploads
-RECOGNITION_APPROVAL_THRESHOLD=90
+RECOGNITION_APPROVAL_THRESHOLD=99
 ```
 
 The application accepts `aws-rekognition` or `fake`:

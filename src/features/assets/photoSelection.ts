@@ -9,7 +9,7 @@ export interface SelectedPhoto {
   width: number;
 }
 
-function readImageDimensions(previewUrl: string) {
+export function readImageDimensions(previewUrl: string) {
   return new Promise<{ height: number; width: number }>((resolve, reject) => {
     const image = new Image();
 
@@ -24,7 +24,7 @@ function readImageDimensions(previewUrl: string) {
     image.addEventListener(
       "error",
       () => {
-        reject(new Error("The selected file could not be displayed as an image."));
+        reject(new Error("The image could not be displayed."));
       },
       { once: true },
     );
@@ -37,6 +37,19 @@ export function createFileSignature(file: File) {
   return `${file.name}:${file.size}:${file.lastModified}`;
 }
 
+export function createClientAssetId() {
+  if (typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hexadecimal = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+  return `${hexadecimal.slice(0, 8)}-${hexadecimal.slice(8, 12)}-${hexadecimal.slice(12, 16)}-${hexadecimal.slice(16, 20)}-${hexadecimal.slice(20)}`;
+}
+
 export async function createSelectedPhoto(file: File): Promise<SelectedPhoto> {
   const previewUrl = URL.createObjectURL(file);
 
@@ -46,7 +59,7 @@ export async function createSelectedPhoto(file: File): Promise<SelectedPhoto> {
     return {
       file,
       height: dimensions.height,
-      id: crypto.randomUUID(),
+      id: createClientAssetId(),
       name: file.name,
       previewUrl,
       size: file.size,
@@ -60,17 +73,7 @@ export async function createSelectedPhoto(file: File): Promise<SelectedPhoto> {
 }
 
 export function createPhotoEditUrl(photo: SelectedPhoto) {
-  const searchParams = new URLSearchParams({
-    height: String(photo.height),
-    lastModified: String(photo.file.lastModified),
-    name: photo.name,
-    previewUrl: photo.previewUrl,
-    size: String(photo.size),
-    type: photo.type,
-    width: String(photo.width),
-  });
-
-  return `/admin/photos/${photo.id}?${searchParams.toString()}`;
+  return `/admin/photos/${photo.id}`;
 }
 
 export function formatFileSize(bytes: number) {

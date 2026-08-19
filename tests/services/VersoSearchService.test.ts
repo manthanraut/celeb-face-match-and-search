@@ -28,15 +28,17 @@ const ITEM: VersoSearchRepositoryItem = {
       evidenceFields: [],
       identityKey: "rihanna",
       providerPersonId: "person-rihanna",
+      searchDecision: "APPROVED",
       source: "recognition",
     },
     {
       confidence: 65,
-      decision: "NEEDS_REVIEW",
+      decision: "APPROVED",
       displayName: "Other Person",
       evidenceFields: [],
       identityKey: "other-person",
       providerPersonId: "person-other",
+      searchDecision: "NEEDS_REVIEW",
       source: "recognition",
     },
   ],
@@ -57,12 +59,14 @@ function createHarness(options: {
   identityMatches?: CelebrityCatalogEntry[];
   repositoryPage?: Awaited<ReturnType<VersoSearchRepository["findApprovedCelebrityUsages"]>>;
   slugMatch?: CelebrityCatalogEntry | null;
+  totalCount?: number;
 } = {}) {
   const celebrityRepository: CelebrityLookupRepository = {
     findByNormalizedIdentity: vi.fn(async () => options.identityMatches ?? [RIHANNA]),
     findBySlug: vi.fn(async () => options.slugMatch === undefined ? RIHANNA : options.slugMatch),
   };
   const searchRepository: VersoSearchRepository = {
+    countApprovedCelebrityAssets: vi.fn(async () => options.totalCount ?? 1),
     findApprovedCelebrityUsages: vi.fn(async () =>
       options.repositoryPage ?? { hasMore: false, items: [ITEM] },
     ),
@@ -105,6 +109,7 @@ describe("VersoSearchService", () => {
       ],
       nextCursor: null,
       query: "Robyn Rihanna Fenty",
+      total_count: 1,
     });
 
     expect(celebrityRepository.findByNormalizedIdentity).toHaveBeenCalledWith(
@@ -113,9 +118,14 @@ describe("VersoSearchService", () => {
     expect(searchRepository.findApprovedCelebrityUsages).toHaveBeenCalledWith({
       celebritySlug: "rihanna",
       cursor: undefined,
-      decisionEngineVersion: 1,
+      decisionEngineVersion: 2,
       filters: { event: "met-gala", year: 2027 },
       limit: 20,
+    });
+    expect(searchRepository.countApprovedCelebrityAssets).toHaveBeenCalledWith({
+      celebritySlug: "rihanna",
+      decisionEngineVersion: 2,
+      filters: { event: "met-gala", year: 2027 },
     });
   });
 
@@ -127,8 +137,10 @@ describe("VersoSearchService", () => {
       items: [],
       nextCursor: null,
       query: "Unknown Person",
+      total_count: 0,
     });
     expect(searchRepository.findApprovedCelebrityUsages).not.toHaveBeenCalled();
+    expect(searchRepository.countApprovedCelebrityAssets).not.toHaveBeenCalled();
   });
 
   it("rejects an alias shared by multiple celebrities", async () => {
@@ -150,6 +162,7 @@ describe("VersoSearchService", () => {
     ).resolves.toMatchObject({
       celebrity: { displayName: "Rihanna", slug: "rihanna" },
       items: [{ assetId: ITEM.assetId }],
+      total_count: 1,
     });
     expect(existing.celebrityRepository.findBySlug).toHaveBeenCalledWith("rihanna");
 

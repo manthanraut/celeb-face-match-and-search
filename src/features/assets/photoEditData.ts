@@ -1,3 +1,5 @@
+import type { AssetDetail } from "./contracts";
+
 export interface PhotoEditData {
   assetId: string;
   height: number;
@@ -16,7 +18,10 @@ export interface PhotoCrop {
   width: number;
 }
 
-const FALLBACK_LAST_MODIFIED = Date.parse("2026-08-18T12:15:00+05:30");
+export interface PhotoDimensions {
+  height: number;
+  width: number;
+}
 
 const CROP_RATIOS = [
   { label: "2:1", ratio: 2 },
@@ -30,21 +35,19 @@ const CROP_RATIOS = [
   { label: "2:3", ratio: 2 / 3 },
 ] as const;
 
-function readPositiveNumber(searchParams: URLSearchParams, key: string, fallback: number) {
-  const value = Number(searchParams.get(key));
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
-
-export function readPhotoEditData(searchParams: URLSearchParams, assetId: string): PhotoEditData {
+export function createPhotoEditData(
+  asset: AssetDetail,
+  dimensions: PhotoDimensions,
+): PhotoEditData {
   return {
-    assetId,
-    height: readPositiveNumber(searchParams, "height", 900),
-    lastModified: readPositiveNumber(searchParams, "lastModified", FALLBACK_LAST_MODIFIED),
-    name: searchParams.get("name")?.trim() || "Untitled photo",
-    previewUrl: searchParams.get("previewUrl"),
-    size: readPositiveNumber(searchParams, "size", 0),
-    type: searchParams.get("type")?.trim() || "image/jpeg",
-    width: readPositiveNumber(searchParams, "width", 1600),
+    assetId: asset.assetId,
+    height: dimensions.height,
+    lastModified: Date.parse(asset.updatedAt),
+    name: asset.originalFilename,
+    previewUrl: asset.links.image,
+    size: asset.sizeBytes,
+    type: asset.mimeType,
+    width: dimensions.width,
   };
 }
 

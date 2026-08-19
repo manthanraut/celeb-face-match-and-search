@@ -30,7 +30,7 @@ The server supports the backend workflow for celebrity image discovery:
 2. The server stores the image locally and creates an asset record in MongoDB.
 3. A background worker sends the image to Amazon Rekognition or the deterministic fake provider.
 4. The celebrity decision engine combines recognition confidence with editorial title and caption evidence.
-5. The CMS can update metadata without running recognition again.
+5. The CMS can update title, caption, alt text, and backstory without running recognition again.
 6. Gallery snapshots associate assets with publication state and canonical event/year context.
 7. Verso clients search by an exact celebrity name or alias and retrieve approved images from published galleries.
 
@@ -80,7 +80,7 @@ AWS_REGION=us-east-1
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DATABASE=celeb_face_match
 UPLOAD_DIR=data/uploads
-RECOGNITION_APPROVAL_THRESHOLD=90
+RECOGNITION_APPROVAL_THRESHOLD=99
 ```
 
 Start MongoDB before starting the application.
@@ -128,7 +128,7 @@ The integration suite creates a uniquely named database and removes it after the
 
 ### Local celebrity catalog prerequisite
 
-Search and metadata-only celebrity inference depend on the `celebrities` MongoDB collection. The current server does not expose an API or checked-in seed command for maintaining that catalog.
+Search and metadata-only celebrity inference depend on the `celebrities` MongoDB collection. During development, startup idempotently inserts a small demo catalog without overwriting existing records. The server does not expose a catalog-management API.
 
 For local development with `RECOGNITION_PROVIDER=fake`, the following is an idempotent example for one of the fake provider's identities:
 
@@ -153,7 +153,7 @@ db.celebrities.updateOne(
 )
 ```
 
-Run it against the configured `MONGODB_DATABASE`, for example through `mongosh`. This is a temporary development bootstrap, not a production catalog-management workflow. Catalog documents are not validated by an API, so malformed records can cause incorrect matching.
+Run custom entries against the configured `MONGODB_DATABASE`, for example through `mongosh`. The built-in development bootstrap is not a production catalog-management workflow. Catalog documents are not validated by an API, so malformed records can cause incorrect matching.
 
 ## Configuration
 
@@ -168,7 +168,7 @@ The server loads `.env` through `dotenv` and validates server-owned variables wi
 | `MONGODB_URI` | No | URI beginning with `mongodb://` or `mongodb+srv://` | `mongodb://127.0.0.1:27017` | MongoDB connection URI. The server does not begin listening if it cannot connect and ping MongoDB. |
 | `MONGODB_DATABASE` | No | 1–63 letters, numbers, underscores, or hyphens | `celeb_face_match` | Database containing assets, celebrities, and gallery usages. |
 | `UPLOAD_DIR` | No | Non-empty path string | `data/uploads` | Local image directory. Relative paths resolve from `process.cwd()`. The directory is created automatically. |
-| `RECOGNITION_APPROVAL_THRESHOLD` | No | Number from `0` through `100` | `90` | Minimum recognition confidence that automatically produces an `APPROVED` association. Decimals are accepted. An empty value uses the default. |
+| `RECOGNITION_APPROVAL_THRESHOLD` | No | Number from `0` through `100` | `99` | Minimum recognition confidence that automatically produces an `APPROVED` association. Decimals are accepted. An empty value uses the default. |
 
 ### AWS credential variables
 
@@ -228,7 +228,14 @@ The current implementation has no authentication or authorization middleware.
 - The server should not be exposed directly to an untrusted network in its current form.
 - Authentication behavior for a production integration requires confirmation and implementation.
 
-There is also no CORS middleware. Same-origin requests work because Express serves the frontend and API from one origin. A browser application hosted on another origin will require CORS support or a reverse proxy.
+The server currently enables permissive CORS for development and demonstration use:
+
+- `Access-Control-Allow-Origin: *` allows browser requests from every origin.
+- `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and `OPTIONS` are allowed.
+- Preflight requests may use any headers they request.
+- Credentialed CORS requests are not enabled. Browsers cannot combine wildcard origins with cookies or other credentialed cross-origin requests.
+
+Because the APIs also have no authentication, wildcard CORS must be replaced with an explicit origin allowlist before the server is exposed beyond a trusted development network.
 
 ### Required headers
 
@@ -393,9 +400,9 @@ The following schemas are reused by multiple endpoints.
 | `sourceText.title` | string or `null`, max 500 | Editorial title. A title is initially derived from the filename. |
 | `sourceText.caption` | string or `null`, max 5,000 | Editorial caption. |
 | `sourceText.altText` | string or `null`, max 2,000 | Editorial alt text. It is not celebrity identity evidence. |
+| `sourceText.backstory` | string or `null`, max 5,000 | Editorial context or story behind the image. It is not celebrity identity evidence. |
 | `sourceText.revision` | positive integer | Incremented on every successful metadata update. |
 | `recognitionStatus` | recognition status | Current asynchronous recognition state. |
-| `searchReady` | boolean | `true` when current enrichment has at least one approved celebrity. Gallery publication is checked separately. |
 | `createdAt` | ISO date/time | Asset creation time. |
 | `updatedAt` | ISO date/time | Most recent stored asset change. |
 | `links.self` | string | Relative asset detail URL. |
@@ -469,11 +476,11 @@ interface RecognizedFace {
 | Field | Type | Description |
 | --- | --- | --- |
 | `associations` | celebrity association array | Approved and review-only candidates. |
-| `decisionEngineVersion` | positive integer or `null` | Current implementation writes version `1`. |
+| `decisionEngineVersion` | positive integer or `null` | Current implementation writes version `2`. |
 | `evaluatedAt` | ISO date/time or `null` | Last decision evaluation time. |
+| `hideFromSearch` | boolean | Editorial search override corresponding to `enrichment_state.hide_from_search` in the project schema. New and legacy assets default to `false`. When `true`, the asset is excluded from public search even if it otherwise qualifies. |
 | `recognitionRevision` | positive integer or `null` | Recognition revision used by the decision. |
 | `sourceTextRevision` | positive integer or `null` | Metadata revision used by the decision. |
-| `searchReady` | boolean | Same value as top-level `searchReady`. |
 
 Celebrity association:
 
@@ -485,7 +492,10 @@ Celebrity association:
 | `evidenceFields` | string array | Zero or more of `title`, `caption`. |
 | `identityKey` | non-empty string | Canonical catalog slug or normalized generated key. |
 | `providerPersonId` | string or `null` | Provider identity when available. |
+| `searchDecision` | string | Celebrity-level search decision: `APPROVED` or `NEEDS_REVIEW`. Public search includes only an association whose value is `APPROVED`. |
 | `source` | string | `recognition` or `metadata-inference`. |
+
+Legacy MongoDB associations that predate `searchDecision` are interpreted using their equivalent `decision` value. API responses normalize those records and always include `searchDecision`.
 
 ### `SearchAsset`
 
@@ -503,6 +513,8 @@ Celebrity association:
 | `sourceText.title` | string or `null` | Current title. |
 | `sourceText.caption` | string or `null` | Current caption. |
 | `sourceText.altText` | string or `null` | Current alt text. |
+
+Backstory is private editorial context on the asset detail and is intentionally not included in search results.
 
 Celebrity object:
 
@@ -535,6 +547,8 @@ interface GalleryEvent {
 | `GET` | `/api/assets/:assetId/image` | Retrieve stored image bytes. |
 | `POST` | `/api/assets/:assetId/recognition/retry` | Requeue failed or indeterminate recognition. |
 | `PATCH` | `/api/assets/:assetId/metadata` | Update editorial metadata and recalculate decisions. |
+| `PATCH` | `/api/assets/:assetId/editorial` | Save photo metadata and optional Event Metadata in one request. |
+| `GET` | `/api/galleries/assets/:assetId/event-metadata` | Retrieve the image's latest persisted content event. |
 | `PUT` | `/api/galleries/:galleryId/context` | Synchronize the complete gallery snapshot. |
 | `DELETE` | `/api/galleries/:galleryId/assets/:assetId` | Remove one asset/gallery association. |
 | `GET` | `/api/search` | Resolve a celebrity name or alias and search published images. |
@@ -716,10 +730,10 @@ Example — `201 Created`:
         "title": "rihanna met gala",
         "caption": null,
         "altText": null,
+        "backstory": null,
         "revision": 1
       },
       "recognitionStatus": "QUEUED",
-      "searchReady": false,
       "createdAt": "2027-05-04T12:00:00.000Z",
       "updatedAt": "2027-05-04T12:00:00.000Z",
       "links": {
@@ -836,10 +850,10 @@ Success response — `200 OK`:
         "title": "Rihanna in Marc Jacobs",
         "caption": "Rihanna arrives at the Met Gala.",
         "altText": "Rihanna on the red carpet.",
+        "backstory": "Photographed shortly before the Met Gala arrival.",
         "revision": 2
       },
       "recognitionStatus": "SUCCEEDED",
-      "searchReady": true,
       "createdAt": "2027-05-04T12:00:00.000Z",
       "updatedAt": "2027-05-04T12:01:00.000Z",
       "links": {
@@ -898,10 +912,10 @@ Success response — `200 OK`: `AssetDetail`
     "title": "Rihanna in Marc Jacobs",
     "caption": "Rihanna arrives at the Met Gala.",
     "altText": "Rihanna on the red carpet.",
+    "backstory": "Photographed shortly before the Met Gala arrival.",
     "revision": 2
   },
   "recognitionStatus": "SUCCEEDED",
-  "searchReady": true,
   "createdAt": "2027-05-04T12:00:00.000Z",
   "updatedAt": "2027-05-04T12:01:00.000Z",
   "links": {
@@ -921,13 +935,14 @@ Success response — `200 OK`: `AssetDetail`
         ],
         "identityKey": "rihanna",
         "providerPersonId": "fake-rihanna",
+        "searchDecision": "APPROVED",
         "source": "recognition"
       }
     ],
-    "decisionEngineVersion": 1,
+    "decisionEngineVersion": 2,
     "evaluatedAt": "2027-05-04T12:01:00.000Z",
+    "hideFromSearch": false,
     "recognitionRevision": 2,
-    "searchReady": true,
     "sourceTextRevision": 2
   },
   "recognition": {
@@ -1105,7 +1120,6 @@ Requeueing:
 - Resets the attempt count to zero.
 - Assigns the server's currently configured recognition provider.
 - Clears the previous result, error, lease, timestamps, and enrichment decisions.
-- Sets `searchReady` to `false`.
 - Does not process recognition synchronously.
 
 Errors:
@@ -1130,7 +1144,7 @@ Example conflict:
 
 ### Update asset metadata
 
-Saves editorial metadata and recalculates celebrity decisions from the stored recognition result. It does not call the recognition provider again.
+Saves editorial metadata and the search-visibility override, then recalculates celebrity decisions from the stored recognition result. It does not call the recognition provider again.
 
 | Property | Value |
 | --- | --- |
@@ -1153,16 +1167,19 @@ Request body:
 | `title` | string or `null` | At least one metadata field is required | Maximum 500 characters. |
 | `caption` | string or `null` | At least one metadata field is required | Maximum 5,000 characters. |
 | `altText` | string or `null` | At least one metadata field is required | Maximum 2,000 characters. |
+| `backstory` | string or `null` | At least one metadata field is required | Maximum 5,000 characters. |
+| `hideFromSearch` | boolean | At least one metadata field is required | `true` excludes the asset from public search; `false` allows it to appear when all other search requirements are met. Defaults to `false` for new assets. |
 
 The body is strict: unknown fields return a validation error.
 
 - Omitted fields retain their current values.
+- Omitting `hideFromSearch` retains the current visibility setting.
 - `null` clears a field.
 - Strings are trimmed.
 - Empty/whitespace-only strings are stored as `null`.
 - Windows CRLF line endings are normalized to LF.
 - Every successful request increments `sourceText.revision`, even if the normalized content is unchanged.
-- Alt text is stored but does not count as celebrity corroboration.
+- Alt text and backstory are stored but do not count as celebrity corroboration.
 
 Example request:
 
@@ -1173,7 +1190,9 @@ curl -X PATCH \
   -d '{
     "title": "Rihanna in Marc Jacobs",
     "caption": "Rihanna arrives at the Met Gala.",
-    "altText": "Rihanna on the red carpet."
+    "altText": "Rihanna on the red carpet.",
+    "backstory": "Photographed shortly before the Met Gala arrival.",
+    "hideFromSearch": false
   }'
 ```
 
@@ -1189,10 +1208,10 @@ Success response — `200 OK`: the complete updated `AssetDetail`.
     "title": "Rihanna in Marc Jacobs",
     "caption": "Rihanna arrives at the Met Gala.",
     "altText": "Rihanna on the red carpet.",
+    "backstory": "Photographed shortly before the Met Gala arrival.",
     "revision": 2
   },
   "recognitionStatus": "SUCCEEDED",
-  "searchReady": true,
   "createdAt": "2027-05-04T12:00:00.000Z",
   "updatedAt": "2027-05-04T12:01:00.000Z",
   "links": {
@@ -1212,13 +1231,14 @@ Success response — `200 OK`: the complete updated `AssetDetail`.
         ],
         "identityKey": "rihanna",
         "providerPersonId": "aws-celebrity-id",
+        "searchDecision": "APPROVED",
         "source": "recognition"
       }
     ],
-    "decisionEngineVersion": 1,
+    "decisionEngineVersion": 2,
     "evaluatedAt": "2027-05-04T12:01:00.000Z",
+    "hideFromSearch": false,
     "recognitionRevision": 2,
-    "searchReady": true,
     "sourceTextRevision": 2
   },
   "recognition": {
@@ -1284,7 +1304,178 @@ Example empty update:
 
 Metadata can be updated while recognition is still queued or processing, but celebrity inference is not performed until recognition has succeeded.
 
+### Save photo editorial state
+
+This is the combined save endpoint used by the Copilot photo page. It validates the photo metadata and optional Event Metadata as one request, updates the photo and its celebrity decisions, and, when Event Metadata is supplied, associates the image with its generated Copilot content record.
+
+The existing metadata and gallery-context endpoints remain available for clients that manage those resources separately.
+
+| Property | Value |
+| --- | --- |
+| Method | `PATCH` |
+| Path | `/api/assets/:assetId/editorial` |
+| Authentication | None |
+| Required headers | `Content-Type: application/json` |
+| Query | None |
+
+Path parameters:
+
+| Name | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `assetId` | string | Yes | 24 hexadecimal characters. |
+
+Request body:
+
+| Field | Type | Required | Constraints and behavior |
+| --- | --- | --- | --- |
+| `metadata` | object | Yes | Same strict schema and behavior as [Update asset metadata](#update-asset-metadata). At least one metadata field must be present. |
+| `eventMetadata` | object | No | When omitted, Event Metadata is left unchanged. When supplied, all three nested fields are required. |
+| `eventMetadata.id` | string enum | When `eventMetadata` is supplied | `met-gala`, `grammys`, `oscars`, `golden-globes`, or `vogue-world`. The server uses this ID to select the canonical stored event name. |
+| `eventMetadata.name` | string | When `eventMetadata` is supplied | Required for schema compatibility. The server does not trust this value; it derives the event tag from `eventMetadata.id`. |
+| `eventMetadata.year` | integer | When `eventMetadata` is supplied | From 1900 through 2199. |
+
+Both the outer body and the nested `metadata` object are strict. Unknown fields return `400 VALIDATION_ERROR`. The complete body is validated before either service is called.
+
+Example request:
+
+```bash
+curl -X PATCH \
+  http://localhost:3000/api/assets/64b000000000000000000001/editorial \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "metadata": {
+      "title": "Rihanna in Marc Jacobs",
+      "caption": "Rihanna arrives at the Met Gala.",
+      "altText": "Rihanna on the red carpet.",
+      "backstory": "Photographed shortly before the Met Gala arrival.",
+      "hideFromSearch": false
+    },
+    "eventMetadata": {
+      "id": "met-gala",
+      "name": "Met Gala",
+      "year": 2026
+    }
+  }'
+```
+
+Success response — `200 OK`:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `asset` | `AssetDetail` | Complete updated asset, recognition, and recalculated enrichment state. |
+| `eventMetadata` | object or `null` | `{ "event": GalleryEvent }` when Event Metadata was supplied; `null` when it was omitted. |
+
+```json
+{
+  "asset": {
+    "assetId": "64b000000000000000000001",
+    "originalFilename": "rihanna-met-gala.jpg",
+    "mimeType": "image/jpeg",
+    "sizeBytes": 248731,
+    "sourceText": {
+      "title": "Rihanna in Marc Jacobs",
+      "caption": "Rihanna arrives at the Met Gala.",
+      "altText": "Rihanna on the red carpet.",
+      "backstory": "Photographed shortly before the Met Gala arrival.",
+      "revision": 2
+    },
+    "recognitionStatus": "QUEUED",
+    "createdAt": "2027-05-04T12:00:00.000Z",
+    "updatedAt": "2027-05-04T12:01:00.000Z",
+    "links": {
+      "self": "/api/assets/64b000000000000000000001",
+      "image": "/api/assets/64b000000000000000000001/image",
+      "admin": "/admin/photos/64b000000000000000000001"
+    },
+    "enrichment": {
+      "associations": [],
+      "decisionEngineVersion": 2,
+      "evaluatedAt": "2027-05-04T12:01:00.000Z",
+      "hideFromSearch": false,
+      "recognitionRevision": 1,
+      "sourceTextRevision": 2
+    },
+    "recognition": {
+      "status": "QUEUED",
+      "provider": "aws-rekognition",
+      "attemptNumber": 0,
+      "revision": 1,
+      "completedAt": null,
+      "lastError": null,
+      "result": null
+    }
+  },
+  "eventMetadata": {
+    "event": {
+      "id": "met-gala",
+      "name": "Met Gala",
+      "year": 2026
+    }
+  }
+}
+```
+
+Errors:
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | `INVALID_JSON` | Malformed JSON. |
+| `400` | `VALIDATION_ERROR` | Invalid asset metadata, event ID/year, unknown field, or missing required nested field. |
+| `400` | `AMBIGUOUS_GALLERY_EVENT` | The derived event tag cannot resolve to one canonical event and year. This should not occur for a valid request generated by the current client. |
+| `404` | `ASSET_NOT_FOUND` or `GALLERY_ASSET_NOT_FOUND` | The asset does not exist when either operation checks it. |
+| `409` | `ASSET_UPDATE_CONFLICT` | Recognition or metadata changed repeatedly while the asset update was being applied. |
+| `413` | `PAYLOAD_TOO_LARGE` | JSON body exceeds 1 MiB. |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected database failure. |
+
+This endpoint is one HTTP operation, but it is not a MongoDB transaction: asset metadata and gallery usage are stored in separate collections, and the default local standalone MongoDB configuration does not support cross-collection transactions. If the asset write succeeds and the later gallery-usage write fails unexpectedly, the request returns an error but the photo metadata may already be saved. Retrying the same request is safe; the gallery usage is upserted and the metadata update is idempotent at the field-value level, although its revision increments again.
+
 ## Gallery APIs
+
+### Get asset event metadata
+
+Returns the most recently updated event context associated with an image through a content usage. This is the persisted value displayed by the Copilot **Event Metadata** section after a page refresh.
+
+| Property | Value |
+| --- | --- |
+| Method | `GET` |
+| Path | `/api/galleries/assets/:assetId/event-metadata` |
+| Authentication | None |
+| Required headers | None |
+| Query/body | None |
+
+Path parameters:
+
+| Name | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `assetId` | string | Yes | 24 hexadecimal characters. |
+
+Example:
+
+```bash
+curl http://localhost:3000/api/galleries/assets/64b000000000000000000001/event-metadata
+```
+
+Success response — `200 OK`:
+
+```json
+{
+  "event": {
+    "id": "met-gala",
+    "name": "Met Gala",
+    "year": 2026
+  }
+}
+```
+
+`event` is `null` when the asset exists but has no usage with resolved event metadata. If multiple content usages contain events, the usage with the latest `updatedAt` value is returned; gallery ID provides a deterministic tie-breaker.
+
+Errors:
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | `VALIDATION_ERROR` | Invalid asset ID. |
+| `404` | `ASSET_NOT_FOUND` | Asset does not exist. |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected MongoDB failure. |
 
 ### Synchronize gallery context
 
@@ -1309,8 +1500,8 @@ Request body:
 | Field | Type | Required | Constraints |
 | --- | --- | --- | --- |
 | `assetIds` | asset ID array | Yes | Maximum 500; every ID must be unique and refer to an existing asset. Empty is allowed. |
-| `published` | boolean | Yes | Only exact JSON booleans are accepted. |
-| `tags` | string array | Yes | Maximum 100; each trimmed tag must be 1–200 characters. Empty is allowed. |
+| `published` | boolean | Yes | Only exact JSON booleans are accepted. A published snapshot requires a resolvable event and year. |
+| `tags` | string array | Yes | Maximum 100; each trimmed tag must be 1–200 characters. Empty is allowed only for an unpublished snapshot. |
 
 The body is strict; unknown fields return `VALIDATION_ERROR`.
 
@@ -1372,7 +1563,8 @@ A canonical event is resolved only when one tag contains both a supported event 
 
 Matching is case-insensitive, accent-insensitive, and tolerant of punctuation separators.
 
-- No matching event/year returns `event: null`; the gallery relationships are still stored.
+- No matching event/year returns `event: null` for an unpublished snapshot; the draft gallery relationships are still stored.
+- A published snapshot without a matching event/year returns `PUBLISHED_GALLERY_EVENT_REQUIRED` before asset lookup or persistence.
 - More than one distinct event/year candidate returns `AMBIGUOUS_GALLERY_EVENT`.
 - Repeated tags resolving to the same event/year are not ambiguous.
 
@@ -1388,6 +1580,8 @@ Matching is case-insensitive, accent-insensitive, and tolerant of punctuation se
 - Context updates do not run or requeue recognition.
 - Requests for the same gallery are serialized within one server process.
 
+The Copilot prototype's **Image gets added in content** button waits two seconds and locally chooses one of `Met Gala`, `Oscars`, `Vogue World`, or `Golden Globe` and one of `2026`, `2025`, `2024`, or `2023`. No API is called by the button. The global **Save** action then synchronizes a published gallery named `copilot-photo-<assetId>`. After that save succeeds, the resulting usage is eligible for the existing `event` and `year` search filters when the celebrity association is otherwise searchable. Refreshing before Save discards the generated values.
+
 Errors:
 
 | Status | Code | Cause |
@@ -1395,6 +1589,7 @@ Errors:
 | `400` | `INVALID_JSON` | Malformed JSON. |
 | `400` | `VALIDATION_ERROR` | Invalid gallery ID/body, duplicate asset IDs, oversized arrays, or unknown fields. |
 | `400` | `AMBIGUOUS_GALLERY_EVENT` | Tags resolve to multiple event/year candidates. |
+| `400` | `PUBLISHED_GALLERY_EVENT_REQUIRED` | A published snapshot has no tag containing a supported event and year. |
 | `404` | `GALLERY_ASSET_NOT_FOUND` | One or more asset IDs do not exist. The response does not identify which IDs are missing. |
 | `413` | `PAYLOAD_TOO_LARGE` | JSON body exceeds 1 MiB. |
 | `500` | `INTERNAL_SERVER_ERROR` | Unexpected MongoDB failure. |
@@ -1406,6 +1601,17 @@ Example ambiguous event:
   "error": {
     "code": "AMBIGUOUS_GALLERY_EVENT",
     "message": "Gallery tags resolve to more than one event or year."
+  }
+}
+```
+
+Example missing published Event Metadata:
+
+```json
+{
+  "error": {
+    "code": "PUBLISHED_GALLERY_EVENT_REQUIRED",
+    "message": "A published gallery must include Event Metadata with an event and year."
   }
 }
 ```
@@ -1478,13 +1684,15 @@ Errors:
 
 Both retrieval endpoints return one result per published gallery usage, not one result per unique asset. If one asset belongs to multiple matching published galleries, it can appear more than once with different `sourceGallery` values.
 
+Both responses include `total_count`, which counts distinct matching asset IDs across all pages for the current celebrity, event, and year filters. It uses the same eligibility rules as the result list, including `hideFromSearch`, but it does not count the same image more than once when that image has multiple matching gallery usages. The count does not change as the client follows `nextCursor` through the same filtered result set.
+
 Only records satisfying all of the following are returned:
 
 - The gallery usage is published.
 - The asset recognition status is `SUCCEEDED`.
-- `enrichment.searchReady` is `true`.
-- The requested celebrity has an `APPROVED` association.
-- The decision-engine version is the server's current version (`1`).
+- `enrichment.hideFromSearch` is not `true` (missing legacy values are treated as `false`).
+- The requested celebrity association has `searchDecision` set to `APPROVED`.
+- The decision-engine version is the server's current version (`2`).
 - The stored recognition and source-text revisions used by enrichment still match the asset.
 - Optional event and year filters match the gallery usage.
 
@@ -1536,6 +1744,7 @@ Success response — `200 OK`:
   celebrity: Celebrity | null;
   items: SearchAsset[];
   nextCursor: string | null;
+  total_count: number;
 }
 ```
 
@@ -1577,7 +1786,8 @@ Success response — `200 OK`:
       }
     }
   ],
-  "nextCursor": null
+  "nextCursor": null,
+  "total_count": 1
 }
 ```
 
@@ -1588,7 +1798,8 @@ Unknown queries are successful empty results:
   "query": "Unknown Person",
   "celebrity": null,
   "items": [],
-  "nextCursor": null
+  "nextCursor": null,
+  "total_count": 0
 }
 ```
 
@@ -1656,6 +1867,7 @@ Success response — `200 OK`:
   celebrity: Celebrity;
   items: SearchAsset[];
   nextCursor: string | null;
+  total_count: number;
 }
 ```
 
@@ -1696,7 +1908,8 @@ Success response — `200 OK`:
       }
     }
   ],
-  "nextCursor": null
+  "nextCursor": null,
+  "total_count": 1
 }
 ```
 
@@ -1779,27 +1992,28 @@ These are recognition-state errors stored on the asset, not direct HTTP errors f
 - An expired final lease becomes `INDETERMINATE`.
 - A clean process shutdown aborts and releases active work without consuming the attempt.
 
-### Decision engine version 1
+### Decision engine version 2
 
-The threshold defaults to 90 and is configurable through `RECOGNITION_APPROVAL_THRESHOLD`.
+The threshold defaults to 99 and is configurable through `RECOGNITION_APPROVAL_THRESHOLD`.
 
 | Scenario | Persisted result |
 | --- | --- |
 | Recognition confidence is at or above threshold | `APPROVED` |
 | Confidence is below threshold, but exact identity/alias appears as a whole phrase in title or caption | `APPROVED` |
 | Confidence is below threshold without title/caption evidence | `NEEDS_REVIEW` |
-| Provider returned no usable celebrity association and title/caption begins with catalog identity followed by ` in ` | `APPROVED` metadata inference |
+| Provider missed the catalog identity named at the start of title/caption followed by ` in `, including when unrelated candidates were returned | `APPROVED` metadata inference |
 | Metadata `X in Y` identity is absent from catalog | No association |
 | Recognition has not succeeded | No association |
 
 Additional behavior:
 
-- Alt text never counts as evidence.
+- Alt text and backstory never count as evidence.
 - Multiple faces are evaluated independently.
 - Repeated matches for one identity are merged.
 - The highest confidence is retained.
 - Any approved duplicate makes the merged association approved.
-- `searchReady` is true when at least one association is approved.
+- Every celebrity association owns its `searchDecision`; there is no image-level search decision.
+- `hideFromSearch` is an independent image-level editorial override. When true, public retrieval excludes the asset without changing any celebrity decisions.
 - `NEEDS_REVIEW` records are persisted but excluded from public retrieval.
 - Metadata updates recalculate decisions without another provider call.
 - Revision-bound writes prevent stale recognition or metadata decisions from becoming searchable.
@@ -1949,8 +2163,8 @@ Check all of the following:
 1. The celebrity exists in `celebrities`.
 2. The query exactly matches `normalizedName` or one value in `normalizedAliases` after normalization.
 3. Recognition is `SUCCEEDED`.
-4. The relevant association is `APPROVED`.
-5. `searchReady` is true.
+4. The relevant association has `searchDecision: APPROVED`.
+5. `hideFromSearch` is false.
 6. Metadata and recognition revisions match the enrichment revisions.
 7. The gallery snapshot includes the asset.
 8. The gallery snapshot has `published: true`.
@@ -1993,14 +2207,15 @@ Use asset detail, health/readiness responses, MongoDB inspection, and local proc
 ## Known constraints
 
 - No authentication or authorization.
-- No CORS configuration.
+- CORS allows every origin and should be restricted before production use.
 - No API versioning.
-- No celebrity catalog CRUD or official seed/import command.
+- No celebrity catalog CRUD or production catalog import command; development startup provides only a small demo bootstrap.
 - No manual approval/rejection API for `NEEDS_REVIEW` associations.
 - No asset deletion API.
 - No external queue; recognition work is stored in MongoDB.
 - Local storage is not independently durable or multi-instance safe.
 - Upload batches are not transactional across all images.
+- Combined photo editorial saves are one HTTP request but are not transactional across the asset and gallery-usage collections when MongoDB runs in the default standalone configuration.
 - Search is exact normalized name/alias lookup only.
 - Designer lookup and semantic/fuzzy search are not implemented.
 - Search results are gallery usages, so the same asset can appear more than once.

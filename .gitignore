@@ -13,3 +13,5 @@ data/uploads/*
 !data/uploads/.gitkeep
 data/recognition-results/*
 !data/recognition-results/.gitkeep
+
+scripts/

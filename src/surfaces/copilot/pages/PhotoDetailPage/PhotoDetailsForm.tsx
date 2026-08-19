@@ -1,9 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { MAX_ASSET_BACKSTORY_LENGTH } from "../../../../../shared/assets";
+import type {
+  AssetMetadataUpdate,
+  AssetSourceText,
+} from "../../../../features/assets/contracts";
 import type { PhotoEditData } from "../../../../features/assets/photoEditData";
 
 interface PhotoDetailsFormProps {
+  formId: string;
+  isSaved: boolean;
+  onDirtyChange: (isDirty: boolean) => void;
+  onSave: (sourceText: AssetMetadataUpdate) => void;
   photo: PhotoEditData;
+  sourceText: AssetSourceText;
 }
 
 const fieldStyles =
@@ -31,20 +41,47 @@ function SearchIcon() {
 
 function FormattingControls() {
   return (
-    <div aria-hidden="true" className="mb-1 flex justify-end gap-3 text-base">
+    <div aria-hidden="true" className="flex gap-3 text-base">
       <span className="grid size-9 place-items-center rounded-md bg-neutral-200 font-bold">≡</span>
       <span className="grid size-9 place-items-center font-mono text-sm font-bold">{"</>"}</span>
     </div>
   );
 }
 
-export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
-  const [altText, setAltText] = useState("Image may contain: Adult, Person, Clothing, and Glove");
-  const [title, setTitle] = useState(photo.name);
+export function PhotoDetailsForm({
+  formId,
+  isSaved,
+  onDirtyChange,
+  onSave,
+  photo,
+  sourceText,
+}: PhotoDetailsFormProps) {
+  const [altText, setAltText] = useState(sourceText.altText ?? "");
+  const [backstory, setBackstory] = useState(sourceText.backstory ?? "");
+  const [caption, setCaption] = useState(sourceText.caption ?? "");
+  const [title, setTitle] = useState(sourceText.title ?? photo.name);
   const wordCount = altText.trim() ? altText.trim().split(/\s+/).length : 0;
 
+  useEffect(() => {
+    if (isSaved) {
+      onDirtyChange(false);
+    }
+  }, [isSaved, onDirtyChange]);
+
   return (
-    <form className="min-w-0" onSubmit={(event) => event.preventDefault()}>
+    <form
+      className="min-w-0"
+      id={formId}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave({
+          altText: altText || null,
+          backstory: backstory || null,
+          caption: caption || null,
+          title: title || null,
+        });
+      }}
+    >
       <div>
         <label className="mb-1.5 block text-base font-bold" htmlFor="photo-title">
           Title
@@ -54,8 +91,12 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
             autoComplete="off"
             className={`${fieldStyles} pr-12`}
             id="photo-title"
+            maxLength={500}
             name="title"
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={(event) => {
+              setTitle(event.target.value);
+              onDirtyChange(true);
+            }}
             type="text"
             value={title}
           />
@@ -72,8 +113,12 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
             autoComplete="off"
             className={`${fieldStyles} pr-12`}
             id="photo-alt-text"
+            maxLength={2_000}
             name="altText"
-            onChange={(event) => setAltText(event.target.value)}
+            onChange={(event) => {
+              setAltText(event.target.value);
+              onDirtyChange(true);
+            }}
             type="text"
             value={altText}
           />
@@ -88,16 +133,29 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
       </div>
 
       <div className="mt-6">
-        <label className="mb-1.5 block text-base font-bold" htmlFor="global-caption">
-          Global Caption
-        </label>
-        <FormattingControls />
+        <div className="mb-1.5 flex items-center justify-between gap-3">
+          <label className="text-base font-bold" htmlFor="global-caption">
+            Global Caption
+          </label>
+          <FormattingControls />
+        </div>
         <textarea
+          aria-describedby="global-caption-guidance"
           autoComplete="off"
           className={`${fieldStyles} min-h-16 resize-y`}
           id="global-caption"
+          maxLength={5_000}
           name="globalCaption"
+          onChange={(event) => {
+            setCaption(event.target.value);
+            onDirtyChange(true);
+          }}
+          value={caption}
         />
+        <p className="mt-1 text-xs leading-5 text-neutral-600" id="global-caption-guidance">
+          Celebrity names in the title or global caption confirm AWS matches below the server-configured automatic-approval threshold.
+          If AWS returns no match, use the format “Celebrity in Designer” to create a metadata-only association.
+        </p>
       </div>
 
       <fieldset className="mt-4">
@@ -128,10 +186,12 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
       </fieldset>
 
       <div className="mt-4">
-        <label className="mb-1.5 block text-base font-bold" htmlFor="photo-credit">
-          Credit
-        </label>
-        <FormattingControls />
+        <div className="mb-1.5 flex items-center justify-between gap-3">
+          <label className="text-base font-bold" htmlFor="photo-credit">
+            Credit
+          </label>
+          <FormattingControls />
+        </div>
         <input autoComplete="off" className={fieldStyles} id="photo-credit" name="credit" type="text" />
       </div>
 
@@ -145,6 +205,32 @@ export function PhotoDetailsForm({ photo }: PhotoDetailsFormProps) {
           id="internal-notes"
           name="internalNotes"
         />
+      </div>
+
+      <div className="mt-4">
+        <label className="mb-1.5 block text-base font-bold" htmlFor="photo-backstory">
+          Backstory
+        </label>
+        <textarea
+          aria-describedby="photo-backstory-count"
+          autoComplete="off"
+          className={`${fieldStyles} min-h-28 resize-y`}
+          id="photo-backstory"
+          maxLength={MAX_ASSET_BACKSTORY_LENGTH}
+          name="backstory"
+          onChange={(event) => {
+            setBackstory(event.target.value);
+            onDirtyChange(true);
+          }}
+          placeholder="Add editorial context or the story behind this image."
+          value={backstory}
+        />
+        <p
+          className="pt-1 text-right text-sm tabular-nums text-neutral-600"
+          id="photo-backstory-count"
+        >
+          {backstory.length}/{MAX_ASSET_BACKSTORY_LENGTH} characters
+        </p>
       </div>
     </form>
   );

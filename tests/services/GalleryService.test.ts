@@ -14,6 +14,7 @@ function createDependencies(
   } = {},
 ) {
   const usageRepository = overrides.usageRepository ?? {
+    findLatestEventContext: vi.fn(async () => null),
     removeAsset: vi.fn(async () => false),
     syncGallery: vi.fn(async () => undefined),
   };
@@ -27,6 +28,39 @@ function createDependencies(
 }
 
 describe("GalleryService", () => {
+  it("returns the latest persisted event metadata for an existing asset", async () => {
+    const dependencies = createDependencies({
+      usageRepository: {
+        findLatestEventContext: vi.fn(async () => ({
+          id: "vogue-world" as const,
+          name: "Vogue World",
+          year: 2025,
+        })),
+        removeAsset: vi.fn(async () => false),
+        syncGallery: vi.fn(async () => undefined),
+      },
+    });
+    const service = new GalleryService(dependencies);
+
+    await expect(service.getAssetEventMetadata(FIRST_ASSET_ID)).resolves.toEqual({
+      event: { id: "vogue-world", name: "Vogue World", year: 2025 },
+    });
+    expect(dependencies.assetRepository.findExistingAssetIds).toHaveBeenCalledWith([
+      FIRST_ASSET_ID,
+    ]);
+  });
+
+  it("rejects event metadata reads for a missing asset", async () => {
+    const dependencies = createDependencies({ existingAssetIds: new Set() });
+    const service = new GalleryService(dependencies);
+
+    await expect(service.getAssetEventMetadata(FIRST_ASSET_ID)).rejects.toMatchObject({
+      code: "ASSET_NOT_FOUND",
+      statusCode: 404,
+    });
+    expect(dependencies.usageRepository.findLatestEventContext).not.toHaveBeenCalled();
+  });
+
   it("persists canonical event context", async () => {
     const dependencies = createDependencies();
     const service = new GalleryService({ ...dependencies, clock: () => NOW });
@@ -75,6 +109,24 @@ describe("GalleryService", () => {
     );
   });
 
+  it("rejects a published gallery without Event Metadata before reading or writing assets", async () => {
+    const dependencies = createDependencies();
+    const service = new GalleryService(dependencies);
+
+    await expect(
+      service.syncContext("gallery-1", {
+        assetIds: [FIRST_ASSET_ID],
+        published: true,
+        tags: ["fashion"],
+      }),
+    ).rejects.toMatchObject({
+      code: "PUBLISHED_GALLERY_EVENT_REQUIRED",
+      statusCode: 400,
+    });
+    expect(dependencies.assetRepository.findExistingAssetIds).not.toHaveBeenCalled();
+    expect(dependencies.usageRepository.syncGallery).not.toHaveBeenCalled();
+  });
+
   it("rejects ambiguous tags before reading or writing assets", async () => {
     const dependencies = createDependencies();
     const service = new GalleryService(dependencies);
@@ -112,6 +164,7 @@ describe("GalleryService", () => {
 
   it("removes an asset idempotently", async () => {
     const usageRepository: GalleryUsageRepository = {
+      findLatestEventContext: vi.fn(async () => null),
       removeAsset: vi.fn(async () => true),
       syncGallery: vi.fn(async () => undefined),
     };
@@ -136,6 +189,7 @@ describe("GalleryService", () => {
       .mockResolvedValue(undefined);
     const dependencies = createDependencies({
       usageRepository: {
+        findLatestEventContext: vi.fn(async () => null),
         removeAsset: vi.fn(async () => false),
         syncGallery,
       },
