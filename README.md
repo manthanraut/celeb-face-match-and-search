@@ -255,7 +255,7 @@ state return `409` because only a terminal failure can be retried manually.
 
 ## Metadata Enrichment and Decisions
 
-Decision engine version 1 uses the configured `RECOGNITION_APPROVAL_THRESHOLD`, which defaults
+Decision engine version 2 uses the configured `RECOGNITION_APPROVAL_THRESHOLD`, which defaults
 to `90`. Each recognized celebrity produces one of two persisted decisions:
 
 | Scenario | Decision |
@@ -263,8 +263,8 @@ to `90`. Each recognized celebrity produces one of two persisted decisions:
 | Confidence is at or above the threshold | `APPROVED` |
 | Confidence is below the threshold and the celebrity appears in title or caption | `APPROVED` |
 | Confidence is below the threshold without title or caption evidence | `NEEDS_REVIEW` |
-| Recognition returns no celebrity and `X in Y` resolves `X` through the celebrity catalog | `APPROVED` metadata inference |
-| Recognition returns no celebrity and `X` is not in the catalog | No association |
+| Recognition misses the celebrity named by catalog-backed `X in Y`, including when unrelated candidates are returned | `APPROVED` metadata inference |
+| Recognition misses the celebrity and `X` is not in the catalog | No association |
 
 Alt text and backstory are stored but are not identity evidence. Review candidates remain persisted, while
 `searchReady` becomes `true` only when at least one association is approved. Multiple faces are
@@ -281,8 +281,9 @@ curl -X PATCH http://localhost:3000/api/assets/<asset-id>/metadata \
 Every metadata save recalculates decisions from the stored recognition result without calling
 Rekognition again. Source-text and recognition revisions are checked in the same atomic MongoDB
 write, so a concurrent recognition completion or editorial save cannot publish stale decisions.
-Metadata-only `X in Y` inference is intentionally catalog-gated; Phase 7 will provide the demo
-catalog seed command.
+Metadata-only `X in Y` inference is intentionally catalog-gated. In development, startup
+idempotently inserts a small demo catalog containing Doja Cat and the prototype's other supported
+identities without overwriting existing records.
 
 ## Gallery Context and Event Enrichment
 

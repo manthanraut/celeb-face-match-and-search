@@ -24,13 +24,12 @@ describe("photo selection utilities", () => {
     expect(formatFileSize(2_500_000)).toBe("2.5 MB");
   });
 
-  it("builds an edit URL containing the selected photo metadata", () => {
+  it("builds an edit URL using the persisted asset identifier", () => {
     const file = new File(["photo"], "red carpet.jpg", {
       lastModified: 1_787_032_800_000,
       type: "image/jpeg",
     });
     const photo: SelectedPhoto = {
-      assetId: "64b000000000000000000001",
       file,
       height: 2160,
       id: "photo-123",
@@ -41,12 +40,6 @@ describe("photo selection utilities", () => {
       width: 3840,
     };
 
-    const editUrl = new URL(createPhotoEditUrl(photo), "http://localhost");
-
-    expect(editUrl.pathname).toBe("/admin/photos/64b000000000000000000001");
-    expect(editUrl.searchParams.get("name")).toBe("red carpet.jpg");
-    expect(editUrl.searchParams.get("previewUrl")).toBe("blob:http://localhost/photo-123");
-    expect(editUrl.searchParams.get("width")).toBe("3840");
-    expect(editUrl.searchParams.get("height")).toBe("2160");
+    expect(createPhotoEditUrl(photo)).toBe("/admin/photos/photo-123");
   });
 });

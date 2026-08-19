@@ -2,7 +2,7 @@ import type { RecognitionResult } from "../../../shared/contracts/recognition.js
 import type { AssetCelebrityAssociation } from "../../repositories/AssetRepository.js";
 import type { CelebrityCatalogEntry } from "../../repositories/CelebrityRepository.js";
 
-export const CELEBRITY_DECISION_ENGINE_VERSION = 1;
+export const CELEBRITY_DECISION_ENGINE_VERSION = 2;
 
 export interface CelebrityDecisionInput {
   approvalThreshold: number;
@@ -70,10 +70,11 @@ export function evaluateCelebrityDecisions({
     });
   }
 
-  // Metadata-only inference is deliberately narrow. It is used only when the
-  // provider returned no usable celebrity candidate, and only when the text
-  // starts with a catalog identity followed by "in".
-  if (associations.size === 0 && recognitionResult !== null) {
+  // Metadata-only inference is deliberately narrow and catalog-gated. It can
+  // add the intended identity when recognition misses that celebrity, even if
+  // the provider returned unrelated candidates. The text must start with a
+  // catalog identity followed by "in".
+  if (recognitionResult !== null) {
     for (const field of ["title", "caption"] as const) {
       const catalogEntry = resolveMetadataInference(catalogIndex, sourceText[field]);
       if (!catalogEntry) {

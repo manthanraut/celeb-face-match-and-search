@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
 
-import {
-  MAX_ASSET_BACKSTORY_LENGTH,
-  type AssetDetail,
-} from "../../../../../shared/assets";
+import { MAX_ASSET_BACKSTORY_LENGTH } from "../../../../../shared/assets";
+import type {
+  AssetMetadataUpdate,
+  AssetSourceText,
+} from "../../../../features/assets/contracts";
+import type { PhotoEditData } from "../../../../features/assets/photoEditData";
 
 interface PhotoDetailsFormProps {
-  asset: AssetDetail;
-}
-
-interface EditableMetadata {
-  altText: string;
-  backstory: string;
-  caption: string;
-  title: string;
+  formId: string;
+  isSaved: boolean;
+  onDirtyChange: (isDirty: boolean) => void;
+  onSave: (sourceText: AssetMetadataUpdate) => void;
+  photo: PhotoEditData;
+  sourceText: AssetSourceText;
 }
 
 const fieldStyles =
@@ -48,32 +48,40 @@ function FormattingControls() {
   );
 }
 
-function toEditableMetadata(asset: AssetDetail): EditableMetadata {
-  return {
-    altText: asset.sourceText.altText ?? "",
-    backstory: asset.sourceText.backstory ?? "",
-    caption: asset.sourceText.caption ?? "",
-    title: asset.sourceText.title ?? "",
-  };
-}
-
-export function PhotoDetailsForm({ asset }: PhotoDetailsFormProps) {
-  const [metadata, setMetadata] = useState<EditableMetadata>(() => toEditableMetadata(asset));
-  const altTextWordCount = metadata.altText.trim()
-    ? metadata.altText.trim().split(/\s+/).length
-    : 0;
-  const backstoryCharacterCount = metadata.backstory.length;
+export function PhotoDetailsForm({
+  formId,
+  isSaved,
+  onDirtyChange,
+  onSave,
+  photo,
+  sourceText,
+}: PhotoDetailsFormProps) {
+  const [altText, setAltText] = useState(sourceText.altText ?? "");
+  const [backstory, setBackstory] = useState(sourceText.backstory ?? "");
+  const [caption, setCaption] = useState(sourceText.caption ?? "");
+  const [title, setTitle] = useState(sourceText.title ?? photo.name);
+  const wordCount = altText.trim() ? altText.trim().split(/\s+/).length : 0;
 
   useEffect(() => {
-    setMetadata(toEditableMetadata(asset));
-  }, [asset.assetId]);
-
-  const updateField = (field: keyof EditableMetadata, value: string) => {
-    setMetadata((current) => ({ ...current, [field]: value }));
-  };
+    if (isSaved) {
+      onDirtyChange(false);
+    }
+  }, [isSaved, onDirtyChange]);
 
   return (
-    <form className="min-w-0" onSubmit={(event) => event.preventDefault()}>
+    <form
+      className="min-w-0"
+      id={formId}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave({
+          altText: altText || null,
+          backstory: backstory || null,
+          caption: caption || null,
+          title: title || null,
+        });
+      }}
+    >
       <div>
         <label className="mb-1.5 block text-base font-bold" htmlFor="photo-title">
           Title
@@ -85,9 +93,12 @@ export function PhotoDetailsForm({ asset }: PhotoDetailsFormProps) {
             id="photo-title"
             maxLength={500}
             name="title"
-            onChange={(event) => updateField("title", event.target.value)}
+            onChange={(event) => {
+              setTitle(event.target.value);
+              onDirtyChange(true);
+            }}
             type="text"
-            value={metadata.title}
+            value={title}
           />
           <MagicIcon />
         </div>
@@ -104,20 +115,19 @@ export function PhotoDetailsForm({ asset }: PhotoDetailsFormProps) {
             id="photo-alt-text"
             maxLength={2_000}
             name="altText"
-            onChange={(event) => updateField("altText", event.target.value)}
+            onChange={(event) => {
+              setAltText(event.target.value);
+              onDirtyChange(true);
+            }}
             type="text"
-            value={metadata.altText}
+            value={altText}
           />
           <MagicIcon />
         </div>
         <div className="flex flex-wrap justify-between gap-2 pt-1 text-sm">
-          <p className="text-[#6233cc]">
-            {metadata.altText
-              ? "Alt text is available for editorial review"
-              : "Add descriptive alt text"}
-          </p>
+          <p className="text-[#6233cc]">Alt text has been automatically generated</p>
           <p className="tabular-nums text-neutral-600">
-            {altTextWordCount} {altTextWordCount === 1 ? "word" : "words"}
+            {wordCount} {wordCount === 1 ? "word" : "words"}
           </p>
         </div>
       </div>
@@ -130,14 +140,22 @@ export function PhotoDetailsForm({ asset }: PhotoDetailsFormProps) {
           <FormattingControls />
         </div>
         <textarea
+          aria-describedby="global-caption-guidance"
           autoComplete="off"
           className={`${fieldStyles} min-h-16 resize-y`}
           id="global-caption"
           maxLength={5_000}
-          name="caption"
-          onChange={(event) => updateField("caption", event.target.value)}
-          value={metadata.caption}
+          name="globalCaption"
+          onChange={(event) => {
+            setCaption(event.target.value);
+            onDirtyChange(true);
+          }}
+          value={caption}
         />
+        <p className="mt-1 text-xs leading-5 text-neutral-600" id="global-caption-guidance">
+          Celebrity names in the title or global caption confirm AWS matches below the server-configured automatic-approval threshold.
+          If AWS returns no match, use the format “Celebrity in Designer” to create a metadata-only association.
+        </p>
       </div>
 
       <fieldset className="mt-4">
@@ -200,18 +218,20 @@ export function PhotoDetailsForm({ asset }: PhotoDetailsFormProps) {
           id="photo-backstory"
           maxLength={MAX_ASSET_BACKSTORY_LENGTH}
           name="backstory"
-          onChange={(event) => updateField("backstory", event.target.value)}
+          onChange={(event) => {
+            setBackstory(event.target.value);
+            onDirtyChange(true);
+          }}
           placeholder="Add editorial context or the story behind this image."
-          value={metadata.backstory}
+          value={backstory}
         />
         <p
           className="pt-1 text-right text-sm tabular-nums text-neutral-600"
           id="photo-backstory-count"
         >
-          {backstoryCharacterCount}/{MAX_ASSET_BACKSTORY_LENGTH} characters
+          {backstory.length}/{MAX_ASSET_BACKSTORY_LENGTH} characters
         </p>
       </div>
-
     </form>
   );
 }

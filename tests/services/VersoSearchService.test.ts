@@ -113,7 +113,7 @@ describe("VersoSearchService", () => {
     expect(searchRepository.findApprovedCelebrityUsages).toHaveBeenCalledWith({
       celebritySlug: "rihanna",
       cursor: undefined,
-      decisionEngineVersion: 1,
+      decisionEngineVersion: 2,
       filters: { event: "met-gala", year: 2027 },
       limit: 20,
     });

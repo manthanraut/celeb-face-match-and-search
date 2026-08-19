@@ -1,12 +1,17 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 
 import {
   createFileSignature,
   createSelectedPhoto,
   type SelectedPhoto,
 } from "../../../../features/assets/photoSelection";
-import { uploadAssets } from "../../../../features/assets/assetApi";
-import { MAX_ASSET_UPLOAD_FILES } from "../../../../../shared/assets";
+import { uploadPhotoAssets } from "../../../../features/assets/api";
+import {
+  MAX_ASSET_IMAGE_DIMENSION,
+  MAX_ASSET_IMAGE_PIXELS,
+  MAX_ASSET_UPLOAD_FILES,
+  MAX_ASSET_UPLOAD_FILE_SIZE_BYTES,
+} from "../../../../../shared/assets";
 
 import { SelectedPhotoCard } from "./SelectedPhotoCard";
 
@@ -25,71 +30,19 @@ export function PhotoUploadPage() {
   const [isPreparing, setIsPreparing] = useState(false);
   const [message, setMessage] = useState("");
   const [selectedPhotos, setSelectedPhotos] = useState<SelectedPhoto[]>([]);
-  const objectUrlsRef = useRef(new Set<string>());
   const selectedSignaturesRef = useRef(new Set<string>());
-
-  const persistPhotos = useCallback(
-    async (photos: readonly SelectedPhoto[], successMessage: string) => {
-      if (photos.length === 0) {
-        return;
-      }
-
-      setIsPreparing(true);
-      setMessage(`Uploading ${photos.length} ${photos.length === 1 ? "image" : "images"}…`);
-
-      try {
-        for (let offset = 0; offset < photos.length; offset += MAX_ASSET_UPLOAD_FILES) {
-          const batch = photos.slice(offset, offset + MAX_ASSET_UPLOAD_FILES);
-          const response = await uploadAssets(
-            batch.map((photo) => ({
-              clientAssetId: photo.id,
-              file: photo.file,
-            })),
-          );
-          if (response.assets.length !== batch.length) {
-            throw new Error("The server returned an incomplete upload response.");
-          }
-
-          const assetIds = new Map(
-            batch.map((photo, index) => [photo.id, response.assets[index].assetId]),
-          );
-          setSelectedPhotos((currentPhotos) =>
-            currentPhotos.map((photo) => {
-              const assetId = assetIds.get(photo.id);
-              return assetId ? { ...photo, assetId } : photo;
-            }),
-          );
-        }
-
-        setMessage(`${successMessage} Uploaded to the server.`);
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : "The upload failed.";
-        setMessage(`${detail} Use Retry Pending Uploads to try again.`);
-      } finally {
-        setIsPreparing(false);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    const objectUrls = objectUrlsRef.current;
-
-    return () => {
-      objectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
-    };
-  }, []);
 
   const prepareFiles = useCallback(async (fileList: FileList | File[]) => {
     const files = Array.from(fileList);
     const acceptedFiles: File[] = [];
     let duplicateCount = 0;
     let invalidCount = 0;
+    let limitCount = 0;
 
     files.forEach((file) => {
       const signature = createFileSignature(file);
 
-      if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
+      if (!ACCEPTED_IMAGE_TYPES.has(file.type) || file.size > MAX_ASSET_UPLOAD_FILE_SIZE_BYTES) {
         invalidCount += 1;
         return;
       }
@@ -99,26 +52,46 @@ export function PhotoUploadPage() {
         return;
       }
 
+      if (acceptedFiles.length >= MAX_ASSET_UPLOAD_FILES) {
+        limitCount += 1;
+        return;
+      }
+
       selectedSignaturesRef.current.add(signature);
       acceptedFiles.push(file);
     });
 
     if (acceptedFiles.length === 0) {
       if (invalidCount > 0) {
-        setMessage("Select JPG or PNG image files.");
+        setMessage("Select valid JPG or PNG images up to 5 MB each.");
       } else if (duplicateCount > 0) {
         setMessage("Those images are already selected.");
+      } else if (limitCount > 0) {
+        setMessage("Upload no more than 10 images at a time.");
       }
       return;
     }
 
     setIsPreparing(true);
-    setMessage("Preparing image previews…");
+    setMessage("Uploading images and queuing celebrity recognition…");
 
     const preparedPhotos = await Promise.all(
       acceptedFiles.map(async (file) => {
         try {
-          return await createSelectedPhoto(file);
+          const selectedPhoto = await createSelectedPhoto(file);
+
+          if (
+            selectedPhoto.width > MAX_ASSET_IMAGE_DIMENSION
+            || selectedPhoto.height > MAX_ASSET_IMAGE_DIMENSION
+            || selectedPhoto.width * selectedPhoto.height > MAX_ASSET_IMAGE_PIXELS
+          ) {
+            URL.revokeObjectURL(selectedPhoto.previewUrl);
+            selectedSignaturesRef.current.delete(createFileSignature(file));
+            invalidCount += 1;
+            return null;
+          }
+
+          return selectedPhoto;
         } catch {
           selectedSignaturesRef.current.delete(createFileSignature(file));
           invalidCount += 1;
@@ -128,23 +101,63 @@ export function PhotoUploadPage() {
     );
 
     const validPhotos = preparedPhotos.filter((photo): photo is SelectedPhoto => photo !== null);
-    validPhotos.forEach((photo) => objectUrlsRef.current.add(photo.previewUrl));
-    setSelectedPhotos((currentPhotos) => [...currentPhotos, ...validPhotos]);
 
-    const messageParts = [`${validPhotos.length} ${validPhotos.length === 1 ? "image" : "images"} selected.`];
-    if (duplicateCount > 0) {
-      messageParts.push(`${duplicateCount} duplicate ${duplicateCount === 1 ? "was" : "were"} skipped.`);
-    }
-    if (invalidCount > 0) {
-      messageParts.push(`${invalidCount} unsupported ${invalidCount === 1 ? "file was" : "files were"} skipped.`);
-    }
     if (validPhotos.length === 0) {
       setIsPreparing(false);
-      setMessage(messageParts.join(" "));
+      setMessage("The selected files did not meet the image upload requirements.");
       return;
     }
-    await persistPhotos(validPhotos, messageParts.join(" "));
-  }, [persistPhotos]);
+
+    try {
+      const assets = await uploadPhotoAssets(validPhotos.map((photo) => ({
+        clientAssetId: photo.id,
+        file: photo.file,
+      })));
+
+      if (assets.length !== validPhotos.length) {
+        throw new Error("The server returned an incomplete upload response.");
+      }
+
+      const uploadedPhotos = validPhotos.map((photo, index) => {
+        const asset = assets[index];
+        if (!asset) {
+          throw new Error("The server returned an incomplete upload response.");
+        }
+
+        URL.revokeObjectURL(photo.previewUrl);
+        return {
+          ...photo,
+          id: asset.assetId,
+          name: asset.originalFilename,
+          previewUrl: asset.links.image,
+          size: asset.sizeBytes,
+          type: asset.mimeType,
+        };
+      });
+
+      setSelectedPhotos((currentPhotos) => [...currentPhotos, ...uploadedPhotos]);
+
+      const messageParts = [`${uploadedPhotos.length} ${uploadedPhotos.length === 1 ? "image was" : "images were"} uploaded and queued for recognition.`];
+      if (duplicateCount > 0) {
+        messageParts.push(`${duplicateCount} duplicate ${duplicateCount === 1 ? "was" : "were"} skipped.`);
+      }
+      if (limitCount > 0) {
+        messageParts.push(`${limitCount} ${limitCount === 1 ? "file was" : "files were"} skipped because each upload is limited to 10 images.`);
+      }
+      if (invalidCount > 0) {
+        messageParts.push(`${invalidCount} invalid ${invalidCount === 1 ? "file was" : "files were"} skipped.`);
+      }
+      setMessage(messageParts.join(" "));
+    } catch (error) {
+      validPhotos.forEach((photo) => {
+        URL.revokeObjectURL(photo.previewUrl);
+        selectedSignaturesRef.current.delete(createFileSignature(photo.file));
+      });
+      setMessage(error instanceof Error ? error.message : "The images could not be uploaded.");
+    } finally {
+      setIsPreparing(false);
+    }
+  }, []);
 
   const handleFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
@@ -157,12 +170,8 @@ export function PhotoUploadPage() {
   const handleRemovePhoto = useCallback((photo: SelectedPhoto) => {
     setSelectedPhotos((currentPhotos) => currentPhotos.filter((currentPhoto) => currentPhoto.id !== photo.id));
     selectedSignaturesRef.current.delete(createFileSignature(photo.file));
-    objectUrlsRef.current.delete(photo.previewUrl);
-    URL.revokeObjectURL(photo.previewUrl);
     setMessage(`${photo.name} removed. You can select it again.`);
   }, []);
-
-  const pendingPhotos = selectedPhotos.filter((photo) => photo.assetId === null);
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -215,7 +224,7 @@ export function PhotoUploadPage() {
               <UploadIcon />
               {isPreparing ? "Preparing…" : "Upload"}
             </label>
-            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Select one or multiple images</p>
+            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Up to 5 MB each · Up to 10 images per upload</p>
           </div>
         </div>
 
@@ -228,30 +237,9 @@ export function PhotoUploadPage() {
             <h2 className="sr-only" id="selected-photos-title">
               Selected Photos
             </h2>
-            {pendingPhotos.length > 0 && !isPreparing ? (
-              <button
-                className="mb-4 inline-flex min-h-11 items-center justify-center rounded-md border border-[#2948b8] px-4 py-2 text-sm font-bold text-[#2948b8] hover:bg-[#eef1ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8]"
-                onClick={() =>
-                  void persistPhotos(
-                    pendingPhotos,
-                    `${pendingPhotos.length} pending ${
-                      pendingPhotos.length === 1 ? "image" : "images"
-                    } selected.`,
-                  )
-                }
-                type="button"
-              >
-                Retry Pending Uploads
-              </button>
-            ) : null}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {selectedPhotos.map((photo) => (
-                <SelectedPhotoCard
-                  isUploading={isPreparing}
-                  key={photo.id}
-                  onRemove={handleRemovePhoto}
-                  photo={photo}
-                />
+                <SelectedPhotoCard key={photo.id} onRemove={handleRemovePhoto} photo={photo} />
               ))}
             </div>
           </section>

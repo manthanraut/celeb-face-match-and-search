@@ -128,7 +128,7 @@ The integration suite creates a uniquely named database and removes it after the
 
 ### Local celebrity catalog prerequisite
 
-Search and metadata-only celebrity inference depend on the `celebrities` MongoDB collection. The current server does not expose an API or checked-in seed command for maintaining that catalog.
+Search and metadata-only celebrity inference depend on the `celebrities` MongoDB collection. During development, startup idempotently inserts a small demo catalog without overwriting existing records. The server does not expose a catalog-management API.
 
 For local development with `RECOGNITION_PROVIDER=fake`, the following is an idempotent example for one of the fake provider's identities:
 
@@ -153,7 +153,7 @@ db.celebrities.updateOne(
 )
 ```
 
-Run it against the configured `MONGODB_DATABASE`, for example through `mongosh`. This is a temporary development bootstrap, not a production catalog-management workflow. Catalog documents are not validated by an API, so malformed records can cause incorrect matching.
+Run custom entries against the configured `MONGODB_DATABASE`, for example through `mongosh`. The built-in development bootstrap is not a production catalog-management workflow. Catalog documents are not validated by an API, so malformed records can cause incorrect matching.
 
 ## Configuration
 
@@ -470,7 +470,7 @@ interface RecognizedFace {
 | Field | Type | Description |
 | --- | --- | --- |
 | `associations` | celebrity association array | Approved and review-only candidates. |
-| `decisionEngineVersion` | positive integer or `null` | Current implementation writes version `1`. |
+| `decisionEngineVersion` | positive integer or `null` | Current implementation writes version `2`. |
 | `evaluatedAt` | ISO date/time or `null` | Last decision evaluation time. |
 | `recognitionRevision` | positive integer or `null` | Recognition revision used by the decision. |
 | `sourceTextRevision` | positive integer or `null` | Metadata revision used by the decision. |
@@ -1493,7 +1493,7 @@ Only records satisfying all of the following are returned:
 - The asset recognition status is `SUCCEEDED`.
 - `enrichment.searchReady` is `true`.
 - The requested celebrity has an `APPROVED` association.
-- The decision-engine version is the server's current version (`1`).
+- The decision-engine version is the server's current version (`2`).
 - The stored recognition and source-text revisions used by enrichment still match the asset.
 - Optional event and year filters match the gallery usage.
 
@@ -1788,7 +1788,7 @@ These are recognition-state errors stored on the asset, not direct HTTP errors f
 - An expired final lease becomes `INDETERMINATE`.
 - A clean process shutdown aborts and releases active work without consuming the attempt.
 
-### Decision engine version 1
+### Decision engine version 2
 
 The threshold defaults to 90 and is configurable through `RECOGNITION_APPROVAL_THRESHOLD`.
 
@@ -1797,7 +1797,7 @@ The threshold defaults to 90 and is configurable through `RECOGNITION_APPROVAL_T
 | Recognition confidence is at or above threshold | `APPROVED` |
 | Confidence is below threshold, but exact identity/alias appears as a whole phrase in title or caption | `APPROVED` |
 | Confidence is below threshold without title/caption evidence | `NEEDS_REVIEW` |
-| Provider returned no usable celebrity association and title/caption begins with catalog identity followed by ` in ` | `APPROVED` metadata inference |
+| Provider missed the catalog identity named at the start of title/caption followed by ` in `, including when unrelated candidates were returned | `APPROVED` metadata inference |
 | Metadata `X in Y` identity is absent from catalog | No association |
 | Recognition has not succeeded | No association |
 
@@ -2004,7 +2004,7 @@ Use asset detail, health/readiness responses, MongoDB inspection, and local proc
 - No authentication or authorization.
 - No CORS configuration.
 - No API versioning.
-- No celebrity catalog CRUD or official seed/import command.
+- No celebrity catalog CRUD or production catalog import command; development startup provides only a small demo bootstrap.
 - No manual approval/rejection API for `NEEDS_REVIEW` associations.
 - No asset deletion API.
 - No external queue; recognition work is stored in MongoDB.

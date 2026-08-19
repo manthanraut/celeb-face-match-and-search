@@ -1,24 +1,55 @@
 import { describe, expect, it } from "vitest";
 
-import { createPhotoCrops, readPhotoEditData } from "./photoEditData";
+import type { AssetDetail } from "./contracts";
+import { createPhotoCrops, createPhotoEditData } from "./photoEditData";
 
 describe("photo edit data utilities", () => {
-  it("reads uploaded photo metadata from search parameters", () => {
-    const searchParams = new URLSearchParams({
-      height: "2160",
-      lastModified: "1787032800000",
-      name: "red-carpet.jpg",
-      previewUrl: "blob:http://localhost/photo-123",
-      size: "2500000",
-      type: "image/jpeg",
-      width: "3840",
-    });
+  it("maps the backend asset detail to editable photo data", () => {
+    const asset = {
+      assetId: "64b000000000000000000001",
+      createdAt: "2027-05-04T12:00:00.000Z",
+      enrichment: {
+        associations: [],
+        decisionEngineVersion: null,
+        evaluatedAt: null,
+        recognitionRevision: null,
+        searchReady: false,
+        sourceTextRevision: null,
+      },
+      links: {
+        admin: "/admin/photos/64b000000000000000000001",
+        image: "/api/assets/64b000000000000000000001/image",
+        self: "/api/assets/64b000000000000000000001",
+      },
+      mimeType: "image/jpeg",
+      originalFilename: "red-carpet.jpg",
+      recognition: {
+        attemptNumber: 0,
+        completedAt: null,
+        lastError: null,
+        provider: "aws-rekognition",
+        result: null,
+        revision: 1,
+        status: "QUEUED",
+      },
+      recognitionStatus: "QUEUED",
+      searchReady: false,
+      sizeBytes: 2_500_000,
+      sourceText: {
+        altText: null,
+        backstory: null,
+        caption: null,
+        revision: 1,
+        title: "red carpet",
+      },
+      updatedAt: "2027-05-04T12:00:00.000Z",
+    } satisfies AssetDetail;
 
-    expect(readPhotoEditData(searchParams, "photo-123")).toMatchObject({
-      assetId: "photo-123",
+    expect(createPhotoEditData(asset, { height: 2160, width: 3840 })).toMatchObject({
+      assetId: "64b000000000000000000001",
       height: 2160,
       name: "red-carpet.jpg",
-      previewUrl: "blob:http://localhost/photo-123",
+      previewUrl: "/api/assets/64b000000000000000000001/image",
       size: 2_500_000,
       type: "image/jpeg",
       width: 3840,

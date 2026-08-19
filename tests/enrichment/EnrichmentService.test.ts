@@ -123,7 +123,7 @@ describe("EnrichmentService", () => {
             displayName: "Rihanna",
           }),
         ],
-        decisionEngineVersion: 1,
+        decisionEngineVersion: 2,
         evaluatedAt: NOW,
         recognitionRevision: 2,
         searchReady: false,
@@ -272,7 +272,7 @@ describe("EnrichmentService", () => {
 
     await expect(service.evaluateNextPending()).resolves.toBe(true);
 
-    expect(enrichmentRepository.findPendingEnrichmentAsset).toHaveBeenCalledWith(1);
+    expect(enrichmentRepository.findPendingEnrichmentAsset).toHaveBeenCalledWith(2);
     expect(enrichmentRepository.applyEnrichment).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,7 +8,6 @@ import {
 } from "../../../../features/assets/photoSelection";
 
 interface SelectedPhotoCardProps {
-  isUploading: boolean;
   onRemove: (photo: SelectedPhoto) => void;
   photo: SelectedPhoto;
 }
@@ -21,7 +20,7 @@ function RemoveIcon() {
   );
 }
 
-export function SelectedPhotoCard({ isUploading, onRemove, photo }: SelectedPhotoCardProps) {
+export function SelectedPhotoCard({ onRemove, photo }: SelectedPhotoCardProps) {
   return (
     <article className="flex min-w-0 flex-col overflow-hidden rounded-sm border border-neutral-300 bg-white shadow-[0_2px_5px_rgb(0_0_0/0.16)]">
       <div className="relative grid aspect-[16/9] place-items-center overflow-hidden bg-neutral-100">
@@ -34,17 +33,14 @@ export function SelectedPhotoCard({ isUploading, onRemove, photo }: SelectedPhot
           src={photo.previewUrl}
           width={photo.width}
         />
-        {photo.assetId === null ? (
-          <button
-            aria-label={`Remove ${photo.name}`}
-            className="absolute right-3 top-3 inline-flex size-11 items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-950 shadow-md hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8] disabled:cursor-not-allowed disabled:text-neutral-400"
-            disabled={isUploading}
-            onClick={() => onRemove(photo)}
-            type="button"
-          >
-            <RemoveIcon />
-          </button>
-        ) : null}
+        <button
+          aria-label={`Remove ${photo.name}`}
+          className="absolute right-3 top-3 inline-flex size-11 items-center justify-center rounded-full border border-neutral-300 bg-white text-neutral-950 shadow-md hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8]"
+          onClick={() => onRemove(photo)}
+          type="button"
+        >
+          <RemoveIcon />
+        </button>
       </div>
 
       <div className="flex min-h-32 flex-1 flex-col p-4">
@@ -61,21 +57,15 @@ export function SelectedPhotoCard({ isUploading, onRemove, photo }: SelectedPhot
             <p className="mt-1.5 text-xs text-neutral-500">{formatFileSize(photo.size)}</p>
           </div>
 
-          {photo.assetId ? (
-            <Link
-              aria-label={`Edit ${photo.name} in a new tab`}
-              className="inline-flex min-h-11 items-center justify-center rounded-md border border-[#2948b8] px-4 py-2 text-sm font-bold text-[#2948b8] hover:bg-[#eef1ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8]"
-              rel="noopener noreferrer"
-              target="_blank"
-              to={createPhotoEditUrl(photo)}
-            >
-              Edit Photo
-            </Link>
-          ) : (
-            <span className="inline-flex min-h-11 items-center px-4 py-2 text-sm font-bold text-neutral-500">
-              {isUploading ? "Uploading…" : "Upload pending"}
-            </span>
-          )}
+          <Link
+            aria-label={`Edit ${photo.name} in a new tab`}
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-[#2948b8] px-4 py-2 text-sm font-bold text-[#2948b8] hover:bg-[#eef1ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2948b8]"
+            rel="noopener noreferrer"
+            target="_blank"
+            to={createPhotoEditUrl(photo)}
+          >
+            Edit Photo
+          </Link>
         </div>
       </div>
     </article>

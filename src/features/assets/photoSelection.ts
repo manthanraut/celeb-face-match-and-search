@@ -1,5 +1,4 @@
 export interface SelectedPhoto {
-  assetId: string | null;
   file: File;
   height: number;
   id: string;
@@ -10,7 +9,7 @@ export interface SelectedPhoto {
   width: number;
 }
 
-function readImageDimensions(previewUrl: string) {
+export function readImageDimensions(previewUrl: string) {
   return new Promise<{ height: number; width: number }>((resolve, reject) => {
     const image = new Image();
 
@@ -25,7 +24,7 @@ function readImageDimensions(previewUrl: string) {
     image.addEventListener(
       "error",
       () => {
-        reject(new Error("The selected file could not be displayed as an image."));
+        reject(new Error("The image could not be displayed."));
       },
       { once: true },
     );
@@ -45,7 +44,6 @@ export async function createSelectedPhoto(file: File): Promise<SelectedPhoto> {
     const dimensions = await readImageDimensions(previewUrl);
 
     return {
-      assetId: null,
       file,
       height: dimensions.height,
       id: crypto.randomUUID(),
@@ -62,17 +60,7 @@ export async function createSelectedPhoto(file: File): Promise<SelectedPhoto> {
 }
 
 export function createPhotoEditUrl(photo: SelectedPhoto) {
-  const searchParams = new URLSearchParams({
-    height: String(photo.height),
-    lastModified: String(photo.file.lastModified),
-    name: photo.name,
-    previewUrl: photo.previewUrl,
-    size: String(photo.size),
-    type: photo.type,
-    width: String(photo.width),
-  });
-
-  return `/admin/photos/${photo.assetId ?? photo.id}?${searchParams.toString()}`;
+  return `/admin/photos/${photo.id}`;
 }
 
 export function formatFileSize(bytes: number) {
