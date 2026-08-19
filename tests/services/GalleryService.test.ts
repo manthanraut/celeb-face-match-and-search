@@ -109,6 +109,24 @@ describe("GalleryService", () => {
     );
   });
 
+  it("rejects a published gallery without Event Metadata before reading or writing assets", async () => {
+    const dependencies = createDependencies();
+    const service = new GalleryService(dependencies);
+
+    await expect(
+      service.syncContext("gallery-1", {
+        assetIds: [FIRST_ASSET_ID],
+        published: true,
+        tags: ["fashion"],
+      }),
+    ).rejects.toMatchObject({
+      code: "PUBLISHED_GALLERY_EVENT_REQUIRED",
+      statusCode: 400,
+    });
+    expect(dependencies.assetRepository.findExistingAssetIds).not.toHaveBeenCalled();
+    expect(dependencies.usageRepository.syncGallery).not.toHaveBeenCalled();
+  });
+
   it("rejects ambiguous tags before reading or writing assets", async () => {
     const dependencies = createDependencies();
     const service = new GalleryService(dependencies);

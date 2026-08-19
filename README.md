@@ -305,9 +305,10 @@ curl -X PUT http://localhost:3000/api/galleries/met-gala-2027/context \
 
 The endpoint accepts up to 500 unique asset IDs and verifies that each asset exists before
 changing gallery usages. It recognizes Met Gala, Grammys, Oscars, Golden Globes, and Vogue
-World when a known event and a year from 1900 through 2199 appear in the same tag. Unsupported
-tags retain the gallery relationship without event context. Conflicting event or year tags
-return `400` rather than choosing one based on tag order.
+World when a known event and a year from 1900 through 2199 appear in the same tag. An unpublished
+snapshot may retain gallery relationships without event context. A published snapshot without
+a supported event and year returns `400 PUBLISHED_GALLERY_EVENT_REQUIRED`. Conflicting event or
+year tags return `400` rather than choosing one based on tag order.
 
 Each asset-and-gallery pair is upserted idempotently. Resending a snapshot preserves its
 original `addedAt`, while tag and publication changes update all current usages and omitted
@@ -323,6 +324,55 @@ selects a random supported event and year locally. The generated values are pers
 image usage only when the global **Save** button is clicked. After saving, **Event Metadata** is
 loaded back from MongoDB on refresh, and the same usage event/year powers the existing Verso search
 filters.
+
+## Vogue XLSX Importer
+
+The repository includes a dry-run-first importer for the Anne Hathaway and Rihanna workbooks:
+
+```bash
+npm run import:vogue
+```
+
+The dry run reads the default files from `~/Downloads`, ignores repeated `rel_id` values, and prints
+all deterministic Event Metadata assignments. It does not access the server, download images, call
+AWS, or write data.
+
+Review the plan, start or restart the development server so the Anne Hathaway catalog entry is
+seeded, confirm `/api/health` reports `aws-rekognition`, and then execute the import:
+
+```bash
+npm run import:vogue -- --execute
+```
+
+The default server URL is `http://10.176.96.109:3000`. Override paths or the server URL when needed:
+
+```bash
+npm run import:vogue -- --execute \
+  --base-url http://localhost:3000 \
+  --anne '/path/to/Images from Vogue for Anne Hathaway.xlsx' \
+  --rihanna '/path/to/Images from Vogue for Rihanna.xlsx'
+```
+
+Importer behavior:
+
+- Uses a stable client asset UUID derived from `rel_id`, so rerunning an unchanged import reuses the
+  original asset instead of creating a duplicate.
+- Keeps the first row for duplicate `rel_id` values. The current workbooks produce 78 unique images.
+- Deterministically assigns exactly eight images blank Event Metadata. These images receive no
+  gallery usage and therefore do not appear in gallery-backed search.
+- Selects event and year independently for the remaining images using separate deterministic hashes.
+  Each of the four values has a 25% probability; final counts do not have to be equal.
+- Preserves spreadsheet title and caption, generates factual alt text and backstory, and saves
+  `hideFromSearch: false` through the combined editorial endpoint.
+- Downloads and uploads images sequentially, then polls asset detail until AWS recognition and
+  enrichment finish. The worker already performs up to three provider attempts, so the importer
+  reports terminal failures without automatically requeueing them.
+- Exits nonzero when an upload fails, recognition fails or times out, or the expected celebrity does
+  not receive an `APPROVED` search decision.
+
+The import command defaults to a 5-second polling interval and a 60-minute recognition timeout.
+Use `--poll-interval-ms` and `--timeout-minutes` to override them. Run `npm run import:vogue -- --help`
+for the complete command reference.
 
 ## Verso Search and Celebrity Archives
 

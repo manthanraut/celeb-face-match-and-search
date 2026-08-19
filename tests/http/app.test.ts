@@ -6,6 +6,58 @@ import { createUnusedGalleryRouteService } from "../helpers/gallery-route-servic
 import { startTestHttpServer } from "../helpers/http-server.js";
 import { createUnusedVersoSearchRouteService } from "../helpers/verso-search-route-service.js";
 
+function createTestApp() {
+  return createApp({
+    assetService: createUnusedAssetRouteService(),
+    checkDatabaseReadiness: () => Promise.resolve(),
+    galleryService: createUnusedGalleryRouteService(),
+    recognitionProvider: "aws-rekognition",
+    versoSearchService: createUnusedVersoSearchRouteService(),
+  });
+}
+
+describe("CORS", () => {
+  it("allows API responses to be read from any origin", async () => {
+    const testServer = await startTestHttpServer(createTestApp());
+
+    try {
+      const response = await fetch(`${testServer.baseUrl}/api/health`, {
+        headers: { Origin: "http://10.176.96.42:5173" },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe("*");
+      expect(response.headers.get("access-control-expose-headers")).toBe("*");
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("handles preflight requests for any API method and requested headers", async () => {
+    const testServer = await startTestHttpServer(createTestApp());
+
+    try {
+      const response = await fetch(`${testServer.baseUrl}/api/assets/asset-id/editorial`, {
+        headers: {
+          "Access-Control-Request-Headers": "authorization, content-type",
+          "Access-Control-Request-Method": "PATCH",
+          Origin: "http://10.176.96.42:5173",
+        },
+        method: "OPTIONS",
+      });
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe("*");
+      expect(response.headers.get("access-control-allow-methods"))
+        .toBe("GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS");
+      expect(response.headers.get("access-control-allow-headers"))
+        .toBe("authorization, content-type");
+    } finally {
+      await testServer.close();
+    }
+  });
+});
+
 describe("API health", () => {
   it("returns liveness without querying MongoDB", async () => {
     const checkDatabaseReadiness = vi.fn().mockRejectedValue(new Error("database secret"));

@@ -12,6 +12,13 @@ export const DEMO_CELEBRITY_CATALOG: readonly CelebrityCatalogEntry[] = [
     slug: "a-ap-rocky",
   },
   {
+    displayName: "Anne Hathaway",
+    normalizedAliases: [],
+    normalizedName: "anne hathaway",
+    providerIdentities: [],
+    slug: "anne-hathaway",
+  },
+  {
     displayName: "Anya Taylor-Joy",
     normalizedAliases: [],
     normalizedName: "anya taylor joy",

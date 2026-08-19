@@ -7,6 +7,16 @@ import {
 } from "../../server/database/demoCelebrityCatalog.js";
 
 describe("demo celebrity catalog", () => {
+  it("contains the canonical Anne Hathaway identity", () => {
+    expect(DEMO_CELEBRITY_CATALOG).toContainEqual({
+      displayName: "Anne Hathaway",
+      normalizedAliases: [],
+      normalizedName: "anne hathaway",
+      providerIdentities: [],
+      slug: "anne-hathaway",
+    });
+  });
+
   it("contains the canonical Doja Cat identity", () => {
     expect(DEMO_CELEBRITY_CATALOG).toContainEqual({
       displayName: "Doja Cat",

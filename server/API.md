@@ -228,7 +228,14 @@ The current implementation has no authentication or authorization middleware.
 - The server should not be exposed directly to an untrusted network in its current form.
 - Authentication behavior for a production integration requires confirmation and implementation.
 
-There is also no CORS middleware. Same-origin requests work because Express serves the frontend and API from one origin. A browser application hosted on another origin will require CORS support or a reverse proxy.
+The server currently enables permissive CORS for development and demonstration use:
+
+- `Access-Control-Allow-Origin: *` allows browser requests from every origin.
+- `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, and `OPTIONS` are allowed.
+- Preflight requests may use any headers they request.
+- Credentialed CORS requests are not enabled. Browsers cannot combine wildcard origins with cookies or other credentialed cross-origin requests.
+
+Because the APIs also have no authentication, wildcard CORS must be replaced with an explicit origin allowlist before the server is exposed beyond a trusted development network.
 
 ### Required headers
 
@@ -1493,8 +1500,8 @@ Request body:
 | Field | Type | Required | Constraints |
 | --- | --- | --- | --- |
 | `assetIds` | asset ID array | Yes | Maximum 500; every ID must be unique and refer to an existing asset. Empty is allowed. |
-| `published` | boolean | Yes | Only exact JSON booleans are accepted. |
-| `tags` | string array | Yes | Maximum 100; each trimmed tag must be 1–200 characters. Empty is allowed. |
+| `published` | boolean | Yes | Only exact JSON booleans are accepted. A published snapshot requires a resolvable event and year. |
+| `tags` | string array | Yes | Maximum 100; each trimmed tag must be 1–200 characters. Empty is allowed only for an unpublished snapshot. |
 
 The body is strict; unknown fields return `VALIDATION_ERROR`.
 
@@ -1556,7 +1563,8 @@ A canonical event is resolved only when one tag contains both a supported event 
 
 Matching is case-insensitive, accent-insensitive, and tolerant of punctuation separators.
 
-- No matching event/year returns `event: null`; the gallery relationships are still stored.
+- No matching event/year returns `event: null` for an unpublished snapshot; the draft gallery relationships are still stored.
+- A published snapshot without a matching event/year returns `PUBLISHED_GALLERY_EVENT_REQUIRED` before asset lookup or persistence.
 - More than one distinct event/year candidate returns `AMBIGUOUS_GALLERY_EVENT`.
 - Repeated tags resolving to the same event/year are not ambiguous.
 
@@ -1581,6 +1589,7 @@ Errors:
 | `400` | `INVALID_JSON` | Malformed JSON. |
 | `400` | `VALIDATION_ERROR` | Invalid gallery ID/body, duplicate asset IDs, oversized arrays, or unknown fields. |
 | `400` | `AMBIGUOUS_GALLERY_EVENT` | Tags resolve to multiple event/year candidates. |
+| `400` | `PUBLISHED_GALLERY_EVENT_REQUIRED` | A published snapshot has no tag containing a supported event and year. |
 | `404` | `GALLERY_ASSET_NOT_FOUND` | One or more asset IDs do not exist. The response does not identify which IDs are missing. |
 | `413` | `PAYLOAD_TOO_LARGE` | JSON body exceeds 1 MiB. |
 | `500` | `INTERNAL_SERVER_ERROR` | Unexpected MongoDB failure. |
@@ -1592,6 +1601,17 @@ Example ambiguous event:
   "error": {
     "code": "AMBIGUOUS_GALLERY_EVENT",
     "message": "Gallery tags resolve to more than one event or year."
+  }
+}
+```
+
+Example missing published Event Metadata:
+
+```json
+{
+  "error": {
+    "code": "PUBLISHED_GALLERY_EVENT_REQUIRED",
+    "message": "A published gallery must include Event Metadata with an event and year."
   }
 }
 ```
@@ -2187,7 +2207,7 @@ Use asset detail, health/readiness responses, MongoDB inspection, and local proc
 ## Known constraints
 
 - No authentication or authorization.
-- No CORS configuration.
+- CORS allows every origin and should be restricted before production use.
 - No API versioning.
 - No celebrity catalog CRUD or production catalog import command; development startup provides only a small demo bootstrap.
 - No manual approval/rejection API for `NEEDS_REVIEW` associations.
