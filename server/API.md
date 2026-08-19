@@ -1700,7 +1700,9 @@ Results are ordered by `sourceGallery.addedAt` descending, then asset ID descend
 
 ### Search by celebrity name or alias
 
-Normalizes the query and resolves it against exact catalog `normalizedName` and `normalizedAliases` fields. This is not fuzzy, semantic, prefix, or designer search.
+Normalizes the query and first resolves exact catalog `normalizedName` and `normalizedAliases`
+matches. If there is no exact match, it falls back to prefix matching on those fields. For example,
+`Riha` resolves to Rihanna. This is not typo-tolerant, semantic, substring, or designer search.
 
 Query normalization:
 
@@ -1722,7 +1724,7 @@ Query parameters:
 
 | Name | Type | Required | Default | Constraints |
 | --- | --- | --- | --- | --- |
-| `query` | string | Yes | — | Trimmed length 1–200. Exact normalized celebrity name or alias. |
+| `query` | string | Yes | — | Trimmed length 1–200. Exact or leading-prefix celebrity name or alias. |
 | `event` | canonical event ID | No | — | `met-gala`, `grammys`, `oscars`, `golden-globes`, or `vogue-world`. |
 | `year` | integer | No | — | 1900–2199. |
 | `limit` | integer | No | `20` | 1–100. |
@@ -1809,7 +1811,7 @@ Errors:
 | --- | --- | --- |
 | `400` | `VALIDATION_ERROR` | Missing/empty query, unsupported event, invalid year/limit, cursor too long, repeated/unknown query field, or another schema failure. |
 | `400` | `INVALID_SEARCH_CURSOR` | Cursor is malformed or bound to a different celebrity/event/year. |
-| `409` | `AMBIGUOUS_CELEBRITY_QUERY` | The normalized name/alias belongs to more than one catalog record. |
+| `409` | `AMBIGUOUS_CELEBRITY_QUERY` | The normalized name/alias or prefix matches more than one catalog record. |
 | `500` | `INTERNAL_SERVER_ERROR` | Unexpected MongoDB failure or malformed persisted data. |
 
 Example ambiguity:

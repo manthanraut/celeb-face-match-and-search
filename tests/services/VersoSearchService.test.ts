@@ -129,6 +129,16 @@ describe("VersoSearchService", () => {
     });
   });
 
+  it("passes a normalized partial name to celebrity lookup", async () => {
+    const { celebrityRepository, service } = createHarness();
+
+    await expect(service.search({ limit: 20, query: " Riha " })).resolves.toMatchObject({
+      celebrity: { displayName: "Rihanna", slug: "rihanna" },
+      query: " Riha ",
+    });
+    expect(celebrityRepository.findByNormalizedIdentity).toHaveBeenCalledWith("riha");
+  });
+
   it("returns an empty resolved response for an unknown query", async () => {
     const { searchRepository, service } = createHarness({ identityMatches: [] });
 
