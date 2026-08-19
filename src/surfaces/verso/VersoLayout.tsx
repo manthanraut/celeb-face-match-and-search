@@ -2,8 +2,7 @@ import { Link, Outlet } from "react-router-dom";
 
 const navigationItems = [
   { label: "Gallery", to: "/galleries/met-gala-2026" },
-  { label: "Discover", to: "/discover?q=search_result" },
-  { label: "Bookmarks", to: "/bookmarks" },
+  { label: "Discover", to: "/discover/" },
 ] as const;
 
 export function VersoLayout() {
@@ -15,10 +14,10 @@ export function VersoLayout() {
       <header className="font-vogue-sans bg-white text-black">
         <div className="flex h-11 items-center justify-center border-y border-[#e3e3e3] text-[0.8rem] tracking-[-0.01em]">
           <span>Your All Access Pass</span>
-          <Link className="ml-6 font-medium uppercase hover:underline" to="/bookmarks">Get the app</Link>
+          <span className="ml-6 font-medium uppercase">Get the app</span>
         </div>
         <div className="relative flex h-[3.6rem] items-center border-b border-[#dedede] px-3 sm:px-5">
-          <Link className="hidden bg-black px-3 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.13em] text-white transition hover:bg-neutral-700 sm:block" to="/bookmarks">Become a member</Link>
+          <span className="hidden bg-black px-3 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.13em] text-white sm:block">Become a member</span>
           <Link aria-label="Vogue home" className="font-editorial absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[2.7rem] leading-none tracking-[-0.075em] hover:text-neutral-600" to="/discover?q=search_result" translate="no">VOGUE</Link>
           <div className="ml-auto flex items-center gap-4 sm:gap-5">
             <Link aria-label="Search" className="hidden size-7 items-center justify-center sm:flex" to="/discover?q=search_result"><svg aria-hidden="true" className="size-5" fill="none" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" strokeWidth="1.4"/><path d="m15.5 15.5 5 5" stroke="currentColor" strokeWidth="1.4"/></svg></Link>

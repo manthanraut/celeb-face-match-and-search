@@ -7,14 +7,17 @@ const adSlotStyles = {
   inline: {
     className: "min-h-32 w-full",
     size: "640 × 100",
+    themeClassName: "border-[#c89538] bg-[#f4d486] text-[#4b3017]",
   },
   leaderboard: {
     className: "mx-auto min-h-24 w-full max-w-[45.5rem]",
     size: "728 × 90",
+    themeClassName: "border-[#a9687d] bg-[#e9c5d1] text-[#4b1830]",
   },
   "rail-tall": {
     className: "min-h-[37.5rem] w-full max-w-[20rem]",
     size: "300 × 600",
+    themeClassName: "border-[#1f4d53] bg-[#2d6970] text-white",
   },
 } as const;
 
@@ -31,8 +34,9 @@ function AdSlot({ variant }: AdSlotProps) {
     <div
       aria-hidden="true"
       className={[
-        "flex items-center justify-center border border-neutral-300 bg-neutral-100 px-5 py-6 text-center text-neutral-500",
+        "flex items-center justify-center border px-5 py-6 text-center",
         slot.className,
+        slot.themeClassName,
       ].join(" ")}
     >
       <div>
@@ -282,7 +286,7 @@ export function GalleryPage() {
 
           <Link
             className="inline-flex min-h-11 w-full items-center justify-center bg-neutral-950 px-6 py-2.5 text-center text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-950 sm:w-fit"
-            to="/discover?q=search_result"
+            to="/discover/"
           >
             Explore image gallery
             <span aria-hidden="true" className="ml-3 text-lg">

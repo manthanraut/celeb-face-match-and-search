@@ -19,10 +19,10 @@ export function DiscoveryImageCard({
 }: DiscoveryImageCardProps) {
   return (
     <article>
-      <div className="group relative aspect-[4/5] overflow-hidden bg-neutral-200">
+      <div className="group relative aspect-[4/5] overflow-hidden bg-[#e8d9d1]">
         <button
           aria-label={`View image details for ${details.celebrityName}`}
-          className="block h-full w-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-white"
+          className="relative block h-full w-full cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-white"
           onClick={() => onOpen(details)}
           type="button"
         >
@@ -34,6 +34,10 @@ export function DiscoveryImageCard({
             loading="lazy"
             src={details.imageUrl}
             width="800"
+          />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-black opacity-0 transition-opacity duration-300 group-hover:opacity-[0.14] motion-reduce:transition-none"
           />
         </button>
         {action}

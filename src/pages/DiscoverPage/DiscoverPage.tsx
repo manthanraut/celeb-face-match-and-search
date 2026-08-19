@@ -18,12 +18,12 @@ import { SearchHubPage } from "./SearchHubPage";
 
 function Advertisement({ compact = false }: { compact?: boolean }) {
   return (
-    <div className={`flex items-center justify-center overflow-hidden bg-[#0c2944] px-7 text-center text-white ${compact ? "min-h-64 py-10" : "min-h-[44rem] py-14"}`}>
+    <div className={`flex items-center justify-center overflow-hidden border px-7 text-center ${compact ? "min-h-64 border-[#c89538] bg-[#f4d486] py-10 text-[#4b3017]" : "min-h-[44rem] border-[#1f4d53] bg-[#2d6970] py-14 text-white"}`}>
       <div>
-        <p className="text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-sky-200">The weekend edit</p>
+        <p className={`text-[0.65rem] font-semibold uppercase tracking-[0.28em] ${compact ? "text-[#70471d]" : "text-[#c9eef0]"}`}>The weekend edit</p>
         <p className={`font-editorial mt-4 leading-none ${compact ? "text-5xl" : "text-4xl"}`}>Travel beautifully.</p>
-        <p className="mx-auto mt-4 max-w-xs text-sm leading-6 text-sky-100">Discover extraordinary stays, remarkable views, and a little more time for yourself.</p>
-        <span className="mt-7 inline-block border border-white px-5 py-3 text-[0.65rem] font-bold uppercase tracking-[0.16em]">Explore now</span>
+        <p className={`mx-auto mt-4 max-w-xs text-sm leading-6 ${compact ? "text-[#5e3a18]" : "text-[#e1f4f5]"}`}>Discover extraordinary stays, remarkable views, and a little more time for yourself.</p>
+        <span className={`mt-7 inline-block border px-5 py-3 text-[0.65rem] font-bold uppercase tracking-[0.16em] ${compact ? "border-[#4b3017]" : "border-white"}`}>Explore now</span>
       </div>
     </div>
   );
@@ -104,10 +104,10 @@ export function DiscoverPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-neutral-950">
-      <section className="border-b border-neutral-950 bg-white px-5 py-10 sm:px-8 sm:py-14 lg:px-12">
+    <div className="min-h-screen bg-[#fffaf6] text-neutral-950">
+      <section className="border-b border-[#9f6878] bg-[#f5e7e3] px-5 py-10 sm:px-8 sm:py-14 lg:px-12">
         <div className="mx-auto max-w-[92rem]">
-          <p className="text-xs font-bold uppercase tracking-[0.2em]">Celebrity image archive</p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#7a1f3d]">Celebrity image archive</p>
           <div className="mt-3 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <h1 className="font-editorial text-5xl leading-none tracking-[-0.035em] sm:text-7xl">
@@ -115,21 +115,22 @@ export function DiscoverPage() {
               </h1>
               <p className="mt-4 text-sm text-neutral-600">{filteredPhotos.length} photographs found</p>
             </div>
-            <form className="flex w-full max-w-lg border-b-2 border-neutral-950" onSubmit={submitSearch} role="search">
+            <form className="flex h-14 w-full max-w-xl items-center overflow-hidden rounded-full border border-[#b77a8d] bg-white p-1 shadow-[0_10px_26px_rgba(79,31,48,0.12)] transition-shadow focus-within:border-[#7a1f3d] focus-within:ring-2 focus-within:ring-[#7a1f3d]/25" onSubmit={submitSearch} role="search">
               <label className="sr-only" htmlFor="archive-search">Search the image archive</label>
-              <input className="min-w-0 flex-1 bg-transparent py-3 text-lg outline-none placeholder:text-neutral-400" id="archive-search" onChange={(event) => setSearchValue(event.target.value)} placeholder="Search a celebrity" type="search" value={searchValue} />
-              <button aria-label="Submit search" className="px-3 text-2xl" type="submit">⌕</button>
+              <span aria-hidden="true" className="ml-4 text-xl text-[#7a1f3d]">⌕</span>
+              <input autoComplete="off" className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-[#7d6b70]" id="archive-search" name="celebrity" onChange={(event) => setSearchValue(event.target.value)} placeholder="Search a celebrity…" type="search" value={searchValue} />
+              <button className="h-full shrink-0 rounded-full bg-[#7a1f3d] px-6 text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#59142b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7a1f3d]" type="submit">Search</button>
             </form>
           </div>
         </div>
       </section>
 
-      <div className="sticky top-0 z-20 border-b border-neutral-300 bg-white/95 px-5 backdrop-blur sm:px-8 lg:px-12">
+      <div className="sticky top-0 z-20 border-b border-[#d7bbb2] bg-[#fffaf6]/95 px-5 backdrop-blur sm:px-8 lg:px-12">
         <div className="mx-auto flex max-w-[92rem] flex-wrap items-center gap-3 py-5 sm:gap-5">
           <span className="mr-2 text-xs font-bold uppercase tracking-[0.18em]">Filter by</span>
           <label className="relative">
             <span className="sr-only">Event</span>
-            <select className="min-w-44 appearance-none rounded-full border border-neutral-950 bg-transparent py-2.5 pl-5 pr-11 text-sm font-semibold outline-offset-4" onChange={(event) => setEvent(event.target.value)} value={event}>
+            <select className="min-w-44 appearance-none rounded-full border border-[#8f4560] bg-white py-2.5 pl-5 pr-11 text-sm font-semibold text-neutral-950 outline-offset-4" onChange={(event) => setEvent(event.target.value)} value={event}>
               <option>All events</option>
               {events.map((item) => <option key={item}>{item}</option>)}
             </select>
@@ -137,7 +138,7 @@ export function DiscoverPage() {
           </label>
           <label className="relative">
             <span className="sr-only">Year</span>
-            <select className="min-w-36 appearance-none rounded-full border border-neutral-950 bg-transparent py-2.5 pl-5 pr-11 text-sm font-semibold outline-offset-4" onChange={(event) => setYear(event.target.value)} value={year}>
+            <select className="min-w-36 appearance-none rounded-full border border-[#8f4560] bg-white py-2.5 pl-5 pr-11 text-sm font-semibold text-neutral-950 outline-offset-4" onChange={(event) => setYear(event.target.value)} value={year}>
               <option>All years</option>
               {years.map((item) => <option key={item}>{item}</option>)}
             </select>
