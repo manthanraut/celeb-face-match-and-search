@@ -407,6 +407,24 @@ describeWithMongo("MongoDB foundation", () => {
         },
       ],
     });
+
+    await galleryUsages!.syncGallery({
+      assetIds: [approved.id],
+      event: "met-gala",
+      eventName: "Met Gala",
+      galleryId: "secondary-published-gallery",
+      published: true,
+      updatedAt: new Date("2027-05-04T13:00:00.000Z"),
+      year: 2027,
+    });
+
+    await expect(
+      galleryUsages!.countApprovedCelebrityAssets({
+        celebritySlug: "rihanna",
+        decisionEngineVersion: 1,
+        filters: {},
+      }),
+    ).resolves.toBe(1);
   });
 
   it("filters and paginates celebrity usages with deterministic tie breaking", async () => {
@@ -483,6 +501,16 @@ describeWithMongo("MongoDB foundation", () => {
       filters: { year: 2026 },
       limit: 20,
     });
+    const metGalaCount = await galleryUsages!.countApprovedCelebrityAssets({
+      celebritySlug: "rihanna",
+      decisionEngineVersion: 1,
+      filters: { event: "met-gala", year: 2027 },
+    });
+    const yearFilteredCount = await galleryUsages!.countApprovedCelebrityAssets({
+      celebritySlug: "rihanna",
+      decisionEngineVersion: 1,
+      filters: { year: 2026 },
+    });
 
     expect(firstPage).toMatchObject({
       hasMore: true,
@@ -496,6 +524,8 @@ describeWithMongo("MongoDB foundation", () => {
       hasMore: false,
       items: [{ assetId: oscars.id, event: "oscars", year: 2026 }],
     });
+    expect(metGalaCount).toBe(2);
+    expect(yearFilteredCount).toBe(1);
   });
 
   it("round-trips asset records and supports batch lookup", async () => {

@@ -36,6 +36,11 @@ export interface VersoSearchRepositoryPage {
 }
 
 export interface VersoSearchRepository {
+  countApprovedCelebrityAssets(options: {
+    celebritySlug: string;
+    decisionEngineVersion: number;
+    filters: VersoSearchFilters;
+  }): Promise<number>;
   findApprovedCelebrityUsages(options: {
     celebritySlug: string;
     cursor?: VersoSearchCursor;

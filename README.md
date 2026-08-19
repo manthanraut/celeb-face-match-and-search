@@ -333,9 +333,11 @@ does not perform semantic ranking or designer lookup in this phase:
 curl 'http://localhost:3000/api/search?query=Robyn%20Rihanna%20Fenty&event=met-gala&year=2027&limit=20'
 ```
 
-When the query resolves, the response includes the canonical celebrity, matching image records, and
-an opaque `nextCursor`. An unknown celebrity returns an empty result with `celebrity: null`. Alias
-collisions return `409` instead of selecting a celebrity arbitrarily.
+When the query resolves, the response includes the canonical celebrity, matching image records,
+`total_count`, and an opaque `nextCursor`. `total_count` is the number of distinct matching images
+across all pages for the current event/year filters. Hidden images are excluded. An unknown celebrity
+returns an empty result with `celebrity: null` and `total_count: 0`. Alias collisions return `409`
+instead of selecting a celebrity arbitrarily.
 
 Open the reusable cross-event archive with the canonical slug:
 

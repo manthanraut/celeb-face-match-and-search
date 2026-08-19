@@ -62,6 +62,7 @@ export class VersoSearchService {
         items: [],
         nextCursor: null,
         query: query.query,
+        total_count: 0,
       };
     }
     if (matches.length > 1) {
@@ -99,13 +100,20 @@ export class VersoSearchService {
     const cursor = query.cursor
       ? decodeCursor(query.cursor, celebrity.slug, filters)
       : undefined;
-    const page = await this.#searchRepository.findApprovedCelebrityUsages({
-      celebritySlug: celebrity.slug,
-      cursor,
-      decisionEngineVersion: CELEBRITY_DECISION_ENGINE_VERSION,
-      filters,
-      limit: query.limit,
-    });
+    const [page, totalCount] = await Promise.all([
+      this.#searchRepository.findApprovedCelebrityUsages({
+        celebritySlug: celebrity.slug,
+        cursor,
+        decisionEngineVersion: CELEBRITY_DECISION_ENGINE_VERSION,
+        filters,
+        limit: query.limit,
+      }),
+      this.#searchRepository.countApprovedCelebrityAssets({
+        celebritySlug: celebrity.slug,
+        decisionEngineVersion: CELEBRITY_DECISION_ENGINE_VERSION,
+        filters,
+      }),
+    ]);
     const lastItem = page.items.at(-1);
 
     return {
@@ -115,6 +123,7 @@ export class VersoSearchService {
         page.hasMore && lastItem
           ? encodeCursor(lastItem, celebrity.slug, filters)
           : null,
+      total_count: totalCount,
     };
   }
 }
