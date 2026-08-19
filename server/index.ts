@@ -1,41 +1,129 @@
-import express from "express";
 import path from "node:path";
-import { createServer as createViteServer } from "vite";
 
 import { createApp } from "./app.js";
 import { environment } from "./config/env.js";
+import { MongoDatabase } from "./database/MongoDatabase.js";
+import { ensureDatabaseIndexes } from "./database/indexes.js";
+import { configureFrontend } from "./frontend.js";
+import { closeServer, listen, startServer } from "./lifecycle.js";
+import { EnrichmentService } from "./modules/enrichment/EnrichmentService.js";
+import { createRecognitionProvider } from "./modules/recognition/createRecognitionProvider.js";
+import { RecognitionWorker } from "./modules/recognition/RecognitionWorker.js";
+import { MongoAssetRepository } from "./repositories/MongoAssetRepository.js";
+import { MongoCelebrityRepository } from "./repositories/MongoCelebrityRepository.js";
+import { MongoGalleryUsageRepository } from "./repositories/MongoGalleryUsageRepository.js";
+import { AssetService } from "./services/AssetService.js";
+import { GalleryService } from "./services/GalleryService.js";
+import { VersoSearchService } from "./services/VersoSearchService.js";
+import { LocalImageStorage } from "./storage/LocalImageStorage.js";
 
 const projectRoot = process.cwd();
 
-async function startServer() {
-  const app = createApp();
+async function main(): Promise<void> {
+  const database = new MongoDatabase({
+    databaseName: environment.MONGODB_DATABASE,
+    uri: environment.MONGODB_URI,
+  });
+  const imageStorage = new LocalImageStorage(path.resolve(projectRoot, environment.UPLOAD_DIR));
+  await imageStorage.initialize();
+  const recognitionProvider = createRecognitionProvider(
+    environment.RECOGNITION_PROVIDER,
+    environment.AWS_REGION,
+  );
 
-  if (environment.NODE_ENV === "production") {
-    const clientBuildPath = path.join(projectRoot, "dist");
-    app.use(express.static(clientBuildPath));
-    app.use((request, response, next) => {
-      if (request.method !== "GET") {
-        next();
-        return;
-      }
+  let recognitionWorker!: RecognitionWorker;
+  let runningServer;
+  try {
+    runningServer = await startServer({
+      closeServer,
+      configureFrontend: (app) => configureFrontend(app, projectRoot, environment.NODE_ENV),
+      createApplication: () => {
+        const assetRepository = new MongoAssetRepository(database.db);
+        const celebrityRepository = new MongoCelebrityRepository(database.db);
+        const galleryUsageRepository = new MongoGalleryUsageRepository(database.db);
+        const enrichmentService = new EnrichmentService({
+          approvalThreshold: environment.RECOGNITION_APPROVAL_THRESHOLD,
+          assetRepository,
+          celebrityRepository,
+          enrichmentRepository: assetRepository,
+        });
+        recognitionWorker = new RecognitionWorker({
+          enrichmentService,
+          provider: recognitionProvider,
+          repository: assetRepository,
+          storage: imageStorage,
+        });
+        const assetService = new AssetService({
+          enrichmentService,
+          recognitionProviderName: recognitionProvider.name,
+          repository: assetRepository,
+          storage: imageStorage,
+        });
+        const galleryService = new GalleryService({
+          assetRepository,
+          usageRepository: galleryUsageRepository,
+        });
+        const versoSearchService = new VersoSearchService({
+          celebrityRepository,
+          searchRepository: galleryUsageRepository,
+        });
 
-      response.sendFile(path.join(clientBuildPath, "index.html"));
+        return createApp({
+          assetService,
+          checkDatabaseReadiness: () => database.ping(),
+          galleryService,
+          recognitionProvider: recognitionProvider.name,
+          versoSearchService,
+        });
+      },
+      database,
+      ensureDatabaseIndexes,
+      listen: (app) => listen(app, environment.PORT),
     });
-  } else {
-    const vite = await createViteServer({
-      root: projectRoot,
-      appType: "spa",
-      server: { middlewareMode: true },
-    });
-    app.use(vite.middlewares);
+  } catch (error) {
+    recognitionProvider.close?.();
+    throw error;
   }
 
-  app.listen(environment.PORT, () => {
-    console.log(`Application available at http://localhost:${environment.PORT}`);
-  });
+  recognitionWorker.start();
+
+  console.log(`Application available at http://localhost:${environment.PORT}`);
+
+  let shutdownPromise: Promise<void> | null = null;
+  const shutdown = () => {
+    shutdownPromise ??= shutdownApplication(recognitionWorker, runningServer);
+    return shutdownPromise;
+  };
+  const handleSignal = (signal: NodeJS.Signals) => {
+    console.log(`Received ${signal}; shutting down.`);
+    void shutdown().catch(() => {
+      console.error("Unable to shut down cleanly.");
+      process.exitCode = 1;
+    });
+  };
+
+  process.once("SIGINT", () => handleSignal("SIGINT"));
+  process.once("SIGTERM", () => handleSignal("SIGTERM"));
 }
 
-startServer().catch((error: unknown) => {
-  console.error("Unable to start the application.", error);
+async function shutdownApplication(
+  recognitionWorker: RecognitionWorker,
+  runningServer: { shutdown(): Promise<void> },
+): Promise<void> {
+  let workerError: unknown;
+  try {
+    await recognitionWorker.stop();
+  } catch (error) {
+    workerError = error;
+  }
+
+  await runningServer.shutdown();
+  if (workerError) {
+    throw workerError;
+  }
+}
+
+main().catch(() => {
+  console.error("Unable to start the application.");
   process.exitCode = 1;
 });
