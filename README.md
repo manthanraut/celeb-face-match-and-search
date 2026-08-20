@@ -1,94 +1,57 @@
 # Celebrity Image Discovery
 
-A hackathon prototype that demonstrates how celebrity recognition can turn editorial
-photography into a searchable discovery experience.
+A full-stack celebrity image workflow with two connected experiences:
 
-The application currently presents a Vogue-inspired Met Gala gallery with a call to
-action that leads into the planned celebrity image search. It runs the React frontend
-and Express API from one TypeScript project and is configured for AWS Rekognition.
+- **Copilot** lets editors upload images, review recognition results, edit metadata, control search visibility, and publish images to an event.
+- **Verso** provides the public discovery and celebrity search experience using data from the same backend.
 
-## Current Features
+## What the app supports
 
-- Responsive Met Gala 2026 editorial gallery
-- CTA from the gallery to celebrity image discovery
-- Copilot-simulated photo selection with drag and drop, multi-select, and preview cards
-- Copilot-style photo uploads and editable title, caption, alt text, and backstory
-- Placeholder routes for search, bookmarks, celebrity archives, and editor tools
-- React and Express served by one development process
-- Shared, validated recognition-result contract
-- AWS Rekognition SDK and server-side provider configuration
-- MongoDB connection lifecycle, readiness check, and idempotent index initialization
-- Idempotent single and batch image ingestion with local file storage
-- Asset list, detail, and image-serving APIs for the Copilot mock
-- Asynchronous AWS Rekognition worker with atomic claims, leases, retries, and recovery
-- Deterministic fake recognition provider for local development and tests
-- Versioned celebrity decision engine with editorial metadata corroboration
-- Revision-safe metadata updates and persisted approval/review decisions
-- Idempotent gallery-context updates with canonical event and year enrichment
-- Celebrity and alias retrieval with event/year filters and stable pagination
-- Preserved Python utilities for offline Rekognition experiments and benchmarking
+- Uploading JPEG and PNG images from Copilot.
+- Asynchronous celebrity recognition with AWS Rekognition or a fake local provider.
+- Editorial metadata: title, caption, alt text, and backstory.
+- A `Hide from search` control for excluding an asset from Verso.
+- Publishing an approved image to a supported event and year.
+- API-backed discovery, search, filtering, and cursor pagination.
+- Celebrity overlays that use backend backstory data while retaining the current static `Featured In` links.
 
-## Current User Flow
+## Architecture
+
+The project runs as one application:
 
 ```text
-Open application
-    → Met Gala 2026 gallery
-    → Explore Celebrity Photos CTA
-    → Discover page placeholder
-
-Open /admin/photos/new
-    → Select one or more local photos
-    → Upload the photos to the server
-    → Open Edit Photo in a new tab
-    → Review and save metadata on the Copilot-style photo details page
+React + Vite (Copilot and Verso)
+              |
+        Express /api/*
+          |         |
+       MongoDB   Local uploads
+          |
+   AWS Rekognition or fake provider
 ```
 
-The backend workflow from upload through celebrity search and archive retrieval is ready.
-The Verso result pages and demo corpus remain to be connected.
-
-## Technology
-
-- React 19
-- TypeScript
-- Vite
-- Tailwind CSS
-- React Router
-- TanStack Query
-- Node.js and Express
-- Zod
-- AWS SDK for Rekognition
-- MongoDB
-- Multer
-- Vitest
+Express owns all `/api/*` routes. In development it mounts Vite middleware; in production it serves the built frontend. MongoDB stores asset metadata, recognition jobs, search decisions, and gallery usage. Uploaded files are stored locally under `data/uploads` by default.
 
 ## Requirements
 
 - Node.js 20.14 or newer
 - npm 10 or newer
-- A local MongoDB instance for backend development
-- Internet access for the sample gallery image
-- AWS credentials when `RECOGNITION_PROVIDER=aws-rekognition`
+- MongoDB running locally, or a reachable MongoDB URI
+- AWS credentials only when using the AWS recognition provider
 
-## Quick Start
-
-Clone your fork and enter the project:
-
-```bash
-git clone https://github.com/<your-username>/celeb-face-match-and-search.git
-cd celeb-face-match-and-search
-```
-
-Install dependencies and create a local environment file:
+## Quick start
 
 ```bash
 npm install
 cp .env.example .env
 ```
 
-Make sure MongoDB is running before starting the application. The default configuration
-connects to `mongodb://127.0.0.1:27017` and uses the `celeb_face_match` database.
+For local development without AWS, set this in `.env`:
 
-Start the application:
+```dotenv
+RECOGNITION_PROVIDER=fake
+```
+
+Start MongoDB, then run:
 
 ```bash
 npm run dev
@@ -96,47 +59,53 @@ npm run dev
 
 Open:
 
-```text
-http://localhost:3000
-```
+- Verso discovery: <http://localhost:3000/discover>
+- Copilot upload: <http://localhost:3000/admin/photos/new>
+- API health: <http://localhost:3000/api/health>
+- Dependency readiness: <http://localhost:3000/api/ready>
 
-The root URL redirects to the Met Gala gallery. Verify the API process at:
+Use `npm run dev` for the complete application. `npm run dev:client` starts only Vite and requires an API server to be available separately.
 
-```text
-http://localhost:3000/api/health
-```
+## Main workflow
 
-Expected response:
+1. Upload 1–10 JPEG or PNG files from `/admin/photos/new`.
+2. The server stores each asset and queues celebrity recognition.
+3. Open `/admin/photos/:assetId` to review the result, edit metadata, and control `Hide from search`.
+4. Add the image to event content and use the page-level **Save** action to persist the event publication.
+5. Eligible assets appear in Verso at `/discover` and in `/api/search` results.
 
-```json
-{
-  "status": "ok",
-  "recognitionProvider": "aws-rekognition"
-}
-```
+The cards shown immediately after upload are temporary page state. Refreshing the upload page clears those cards, but it does **not** delete uploaded assets. Until the photo-library page is implemented, assets can be listed through `GET /api/assets?limit=20` and opened at `/admin/photos/:assetId`.
 
-Verify that MongoDB is ready at:
+### Upload limits
 
-```text
-http://localhost:3000/api/ready
-```
+- JPEG or PNG only
+- Maximum 10 files per request
+- Maximum 5 MiB per file
+- Maximum 10,000 pixels on either edge
+- Maximum 50 megapixels
 
-Expected response:
+## Search eligibility
 
-```json
-{
-  "status": "ready",
-  "checks": {
-    "database": "up"
-  }
-}
-```
+An image is searchable only when all of these conditions are satisfied:
 
-Stop the development server with `Ctrl+C`.
+- Recognition completed successfully.
+- Enrichment and decision records use the current engine revisions.
+- The celebrity association has `searchDecision: APPROVED`.
+- The asset has a published gallery usage for a supported event and year.
+- `enrichment.hideFromSearch` is not `true`.
+- The recognized celebrity exists in the celebrity catalog.
 
-## Available Routes
+The product concept may refer to this field as `enrichment_state.hide_from_search`; the implemented API and MongoDB property is `enrichment.hideFromSearch`. Setting it to `true` excludes the asset from discovery and search. Setting it to `false` only permits search when every other eligibility condition also passes.
 
-| Route | Status | Purpose |
+After an editor saves changes to visibility, metadata, or publication, the frontend invalidates the Verso discovery and search caches so the next visit or refresh uses current server data.
+
+Search currently matches normalized celebrity names and aliases exactly. It is not semantic or fuzzy search.
+
+## Important routes
+
+### Frontend
+
+| Route | Purpose | Status |
 | --- | --- | --- |
 | `/` | Ready | Redirects to the sample gallery |
 | `/galleries/met-gala-2026` | Ready | Vogue-inspired gallery and discovery CTA |
@@ -160,259 +129,41 @@ Stop the development server with `Ctrl+C`.
 | `GET /api/search` | Ready | Resolve a celebrity name or alias and return matching images |
 | `GET /api/celebrities/:celebritySlug` | Ready | Return a filtered celebrity archive |
 
-## Asset Ingestion API
+### API
 
-Upload one to ten JPEG or PNG images using repeated `images` fields. Each image must
-be no larger than 5 MiB, matching
-[Amazon Rekognition's raw-byte input constraints](https://docs.aws.amazon.com/rekognition/latest/dg/limits.html),
-with neither edge above 10,000 pixels and no more than 50 megapixels. The `manifest` must
-contain one client-generated UUID per image in the same order:
-
-```bash
-curl -X POST http://localhost:3000/api/assets \
-  -F 'images=@/path/to/rihanna.jpg' \
-  -F 'manifest=[{"clientAssetId":"f167c99c-9ad0-4f3d-aad4-bf19cbe15a90"}]'
-```
-
-The response is immediate after the image and MongoDB record are saved. Recognition is
-initialized as `QUEUED` and processed asynchronously. Reusing a client asset ID with the
-same bytes returns the original asset, while reusing it for different bytes returns `409`.
-
-Upload results preserve manifest order and include a `created` flag plus relative asset,
-image, and admin links. The endpoint returns `201` when at least one asset is created and
-`200` when the whole request is an idempotent replay. Idempotency is scoped to the client
-asset ID, so the same image bytes uploaded with different IDs create separate assets.
-
-Batches are persisted one asset at a time. If a later image fails, earlier successful
-assets remain; safely retry the full batch with the same client asset IDs. Under concurrent
-upload load, the endpoint can return `429`; clients should retry with a short backoff.
-
-List assets newest first with an optional cursor:
-
-```text
-GET /api/assets?limit=20&cursor=<asset-id>
-```
-
-`limit` defaults to `20` and accepts values from `1` through `100`. When `nextCursor` is
-not `null`, pass it as the next request's `cursor` to continue listing.
-
-## Commands
-
-| Command | Purpose |
+| Method and route | Purpose |
 | --- | --- |
-| `npm run dev` | Start Express with Vite development middleware |
-| `npm run typecheck` | Validate browser, shared, server, and test TypeScript |
-| `npm test` | Run the Vitest suite; MongoDB integration tests are skipped unless configured |
-| `npm run build` | Type-check and build the client and server |
-| `NODE_ENV=production npm start` | Serve an existing production build |
+| `GET /api/health` | Process health |
+| `GET /api/ready` | MongoDB and storage readiness |
+| `POST /api/assets` | Upload assets |
+| `GET /api/assets` | List assets |
+| `GET /api/assets/:id` | Get asset details |
+| `PATCH /api/assets/:id/editorial` | Save editorial metadata, visibility, and event usage |
+| `GET /api/discovery` | Get ranked discovery people and representative images |
+| `GET /api/search` | Search celebrities with event and year filters |
+| `GET /api/celebrities/:slug` | Get a celebrity search archive response |
 
-To verify the production build locally:
+See [server/API.md](server/API.md) for request schemas, response schemas, and error behavior.
 
-```bash
-npm run build
-NODE_ENV=production npm start
-```
+## Recognition decisions
 
-Run the MongoDB integration tests against the local instance explicitly:
-
-```bash
-TEST_MONGODB_URI=mongodb://127.0.0.1:27017 \
-  npm test -- tests/database/mongo.integration.test.ts
-```
-
-The integration suite creates a uniquely named test database and drops it when the run finishes.
-
-## Asynchronous Recognition
-
-The server atomically claims queued assets in MongoDB and processes them with the configured
-provider. A claim uses a time-limited lease so interrupted work can be recovered safely. The
-worker makes up to three attempts for temporary provider failures with exponential backoff.
-Non-retryable failures stop immediately. An expired final attempt becomes `INDETERMINATE`
-instead of being repeated without a known outcome.
-
-Provider responses are stored in raw and normalized forms. Only the normalized result and a
-safe error summary are returned by `GET /api/assets/:assetId`; raw provider payloads remain
-internal. Successful recognition is evaluated immediately by the celebrity decision engine.
-The worker also reconciles completed results that were not enriched because a process stopped
-between the two operations.
-
-For local work without AWS credentials, set:
-
-```env
-RECOGNITION_PROVIDER=fake
-```
-
-The fake provider derives stable results from the image bytes, making repeated runs and tests
-deterministic. New uploads are tagged with the active provider. An explicit retry also moves a
-failed or indeterminate asset to the currently configured provider:
-
-```text
-POST /api/assets/<asset-id>/recognition/retry
-```
-
-The endpoint returns `202` after requeueing. Assets in `QUEUED`, `PROCESSING`, or `SUCCEEDED`
-state return `409` because only a terminal failure can be retried manually.
-
-## Metadata Enrichment and Decisions
-
-Decision engine version 2 uses the configured `RECOGNITION_APPROVAL_THRESHOLD`, which defaults
-to `99`. Each recognized celebrity produces one of two persisted decisions:
-
-| Scenario | Decision |
+| Condition | Search decision |
 | --- | --- |
-| Confidence is at or above the threshold | `APPROVED` |
-| Confidence is below the threshold and the celebrity appears in title or caption | `APPROVED` |
-| Confidence is below the threshold without title or caption evidence | `NEEDS_REVIEW` |
-| Recognition misses the celebrity named by catalog-backed `X in Y`, including when unrelated candidates are returned | `APPROVED` metadata inference |
-| Recognition misses the celebrity and `X` is not in the catalog | No association |
+| Recognition confidence meets the configured threshold | Approved |
+| Lower confidence is corroborated by title or caption | Approved |
+| Lower confidence has no supporting editorial evidence | Needs review |
+| Catalog-backed metadata identifies a supported person and event | Can be approved by inference |
 
-Alt text and backstory are stored but are not identity evidence. Each celebrity association stores
-its own `searchDecision` as `APPROVED` or `NEEDS_REVIEW`; there is no image-level search decision.
-Multiple faces are evaluated independently and repeated matches for the same celebrity are consolidated.
+Backstory and alt text are editorial content and are not used as identity evidence.
 
-The Copilot photo page also exposes a **Hide from search** switch. It is off by default and is
-saved through the same metadata endpoint as `hideFromSearch`. A hidden asset keeps its recognition
-decisions but is excluded from Verso search until the switch is turned off and saved.
+## Configuration
 
-Save one or more editorial fields with:
+Copy `.env.example` to `.env` and adjust as needed:
 
-```bash
-curl -X PATCH http://localhost:3000/api/assets/<asset-id>/metadata \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Rihanna in Marc Jacobs","caption":"Rihanna arrives at the Met Gala","backstory":"Photographed shortly before the arrival.","hideFromSearch":false}'
-```
-
-Every metadata save recalculates decisions from the stored recognition result without calling
-Rekognition again. Source-text and recognition revisions are checked in the same atomic MongoDB
-write, so a concurrent recognition completion or editorial save cannot publish stale decisions.
-Metadata-only `X in Y` inference is intentionally catalog-gated. In development, startup
-idempotently inserts a small demo catalog containing Doja Cat and the prototype's other supported
-identities without overwriting existing records.
-
-## Gallery Context and Event Enrichment
-
-Send the complete gallery snapshot whenever a gallery is saved or published:
-
-```bash
-curl -X PUT http://localhost:3000/api/galleries/met-gala-2027/context \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "assetIds":["64b000000000000000000001"],
-    "published":true,
-    "tags":["fashion","Met Gala 2027","storytype:news-and-trending"]
-  }'
-```
-
-The endpoint accepts up to 500 unique asset IDs and verifies that each asset exists before
-changing gallery usages. It recognizes Met Gala, Grammys, Oscars, Golden Globes, and Vogue
-World when a known event and a year from 1900 through 2199 appear in the same tag. An unpublished
-snapshot may retain gallery relationships without event context. A published snapshot without
-a supported event and year returns `400 PUBLISHED_GALLERY_EVENT_REQUIRED`. Conflicting event or
-year tags return `400` rather than choosing one based on tag order.
-
-Each asset-and-gallery pair is upserted idempotently. Resending a snapshot preserves its
-original `addedAt`, while tag and publication changes update all current usages and omitted
-assets are removed. Gallery changes never enqueue or rerun recognition. A CMS asset-removal
-event can also call:
-
-```text
-DELETE /api/galleries/<gallery-id>/assets/<asset-id>
-```
-
-On the Copilot photo page, **Image gets added in content** shows a two-second loading state and
-selects a random supported event and year locally. The generated values are persisted as a published
-image usage only when the global **Save** button is clicked. After saving, **Event Metadata** is
-loaded back from MongoDB on refresh, and the same usage event/year powers the existing Verso search
-filters.
-
-## Vogue XLSX Importer
-
-The repository includes a dry-run-first importer for the Anne Hathaway and Rihanna workbooks:
-
-```bash
-npm run import:vogue
-```
-
-The dry run reads the default files from `~/Downloads`, ignores repeated `rel_id` values, and prints
-all deterministic Event Metadata assignments. It does not access the server, download images, call
-AWS, or write data.
-
-Review the plan, start or restart the development server so the Anne Hathaway catalog entry is
-seeded, confirm `/api/health` reports `aws-rekognition`, and then execute the import:
-
-```bash
-npm run import:vogue -- --execute
-```
-
-The default server URL is `http://10.176.96.109:3000`. Override paths or the server URL when needed:
-
-```bash
-npm run import:vogue -- --execute \
-  --base-url http://localhost:3000 \
-  --anne '/path/to/Images from Vogue for Anne Hathaway.xlsx' \
-  --rihanna '/path/to/Images from Vogue for Rihanna.xlsx'
-```
-
-Importer behavior:
-
-- Uses a stable client asset UUID derived from `rel_id`, so rerunning an unchanged import reuses the
-  original asset instead of creating a duplicate.
-- Keeps the first row for duplicate `rel_id` values. The current workbooks produce 78 unique images.
-- Deterministically assigns exactly eight images blank Event Metadata. These images receive no
-  gallery usage and therefore do not appear in gallery-backed search.
-- Selects event and year independently for the remaining images using separate deterministic hashes.
-  Each of the four values has a 25% probability; final counts do not have to be equal.
-- Preserves spreadsheet title and caption, generates factual alt text and backstory, and saves
-  `hideFromSearch: false` through the combined editorial endpoint.
-- Downloads and uploads images sequentially, then polls asset detail until AWS recognition and
-  enrichment finish. The worker already performs up to three provider attempts, so the importer
-  reports terminal failures without automatically requeueing them.
-- Exits nonzero when an upload fails, recognition fails or times out, or the expected celebrity does
-  not receive an `APPROVED` search decision.
-
-The import command defaults to a 5-second polling interval and a 60-minute recognition timeout.
-Use `--poll-interval-ms` and `--timeout-minutes` to override them. Run `npm run import:vogue -- --help`
-for the complete command reference.
-
-## Verso Search and Celebrity Archives
-
-Search uses exact normalized celebrity names and aliases from the celebrity catalog. It deliberately
-does not perform semantic ranking or designer lookup in this phase:
-
-```bash
-curl 'http://localhost:3000/api/search?query=Robyn%20Rihanna%20Fenty&event=met-gala&year=2027&limit=20'
-```
-
-When the query resolves, the response includes the canonical celebrity, matching image records,
-`total_count`, and an opaque `nextCursor`. `total_count` is the number of distinct matching images
-across all pages for the current event/year filters. Hidden images are excluded. An unknown celebrity
-returns an empty result with `celebrity: null` and `total_count: 0`. Alias collisions return `409`
-instead of selecting a celebrity arbitrarily.
-
-Open the reusable cross-event archive with the canonical slug:
-
-```bash
-curl 'http://localhost:3000/api/celebrities/rihanna?event=oscars&year=2026'
-```
-
-Both endpoints accept optional `event`, `year`, `limit`, and `cursor` parameters. `limit` defaults to
-20 and is capped at 100. Results are ordered by gallery `addedAt`, followed by stable asset and gallery
-tie-breakers. Cursors are bound to the celebrity and filters, so they cannot be reused against a
-different result set.
-
-Retrieval starts from published gallery usages and returns only assets whose requested celebrity
-association has `searchDecision: APPROVED`. The stored decision-engine version, recognition revision, and source-text
-revision must still match the asset's current state. Review-only, stale, draft, and failed-recognition
-records are excluded.
-
-## Environment Configuration
-
-Copy `.env.example` to `.env`. The initial configuration is:
-
-```env
+```dotenv
 NODE_ENV=development
 PORT=3000
-RECOGNITION_PROVIDER=aws-rekognition
+RECOGNITION_PROVIDER=fake
 AWS_REGION=us-east-1
 MONGODB_URI=mongodb://127.0.0.1:27017
 MONGODB_DATABASE=celeb_face_match
@@ -420,222 +171,48 @@ UPLOAD_DIR=data/uploads
 RECOGNITION_APPROVAL_THRESHOLD=99
 ```
 
-The application accepts `aws-rekognition` or `fake`:
+When `RECOGNITION_PROVIDER=aws-rekognition`, provide AWS credentials through your normal AWS credential chain. Do not commit credentials or `.env` files.
 
-```env
-RECOGNITION_PROVIDER=fake
-```
+## Commands
 
-### AWS Credentials
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Run Express and Vite together with file watching |
+| `npm run dev:client` | Run only the Vite frontend |
+| `npm run dev:server` | Run the combined server entry point with file watching |
+| `npm run typecheck` | Check TypeScript types |
+| `npm test` | Run the Vitest suite |
+| `npm run build` | Type-check and create production client/server builds |
+| `npm start` | Run the production server from `dist-server` |
 
-AWS credentials are not needed to view existing pages or when using the fake provider. They
-are required when the worker processes an upload with `RECOGNITION_PROVIDER=aws-rekognition`.
-
-Prefer an AWS profile or temporary credentials configured outside the repository:
-
-```bash
-export AWS_PROFILE="your-profile"
-export AWS_REGION="us-east-1"
-```
-
-When temporary environment credentials are required:
+Before opening a pull request, run:
 
 ```bash
-export AWS_ACCESS_KEY_ID="your-access-key-id"
-export AWS_SECRET_ACCESS_KEY="your-secret-access-key"
-export AWS_SESSION_TOKEN="your-session-token"
-export AWS_REGION="us-east-1"
+npm run typecheck
+npm test
+npm run build
 ```
 
-Never put secrets in variables beginning with `VITE_`; Vite exposes those variables
-to browser code. Never commit `.env` files or AWS credentials.
+MongoDB integration tests are optional and require a configured test database.
 
-## Application Architecture
-
-The project is one application, not separately deployed frontend and backend services.
+## Project layout
 
 ```text
-Browser
-   ↓
-Express server
-   ├── /api/*  → API routes
-   ├── recognition worker → AWS Rekognition or deterministic fake provider
-   ├── MongoDB  → metadata, recognition state and gallery usage
-   ├── data/uploads → ignored local image storage
-   └── /*       → React application through Vite or the production build
+src/                    React application
+  pages/                Copilot and Verso route pages
+  features/             API clients, hooks, schemas, and feature UI
+server/                 Express API and backend services
+  repositories/         MongoDB data access
+shared/                 Contracts shared by client and server
+data/uploads/           Local uploaded image storage
+server/API.md           Detailed API documentation
 ```
 
-In development, Express mounts Vite as middleware. In production, Express serves the
-built React files from `dist/`.
+## Current limitations
 
-## Project Structure
-
-```text
-celeb-face-match-and-search/
-├── src/
-│   ├── app/                      # App composition, providers, and router
-│   ├── surfaces/
-│   │   ├── verso/                # Public gallery/discovery experience
-│   │   │   ├── VersoLayout.tsx
-│   │   │   └── pages/
-│   │   └── copilot/              # Internal editorial experience
-│   │       ├── CopilotLayout.tsx
-│   │       ├── components/
-│   │       └── pages/
-│   ├── features/
-│   │   └── assets/               # Shared photo metadata and crop logic
-│   ├── components/               # UI shared by both surfaces
-│   └── styles/global.css
-├── server/
-│   ├── app.ts                    # Testable Express application factory
-│   ├── config/                   # Environment validation
-│   ├── database/                 # MongoDB lifecycle and indexes
-│   ├── frontend.ts               # Vite and production-client integration
-│   ├── index.ts                  # Process startup and dependency composition
-│   ├── lifecycle.ts              # HTTP, frontend, and database lifecycle
-│   ├── middleware/               # Consistent API errors
-│   ├── modules/                  # Recognition and gallery event-domain logic
-│   ├── repositories/             # Asset and gallery persistence boundaries
-│   ├── routes/                   # API routes
-│   ├── services/                 # Asset and gallery orchestration
-│   └── storage/                  # Local image-storage boundary
-├── shared/
-│   ├── assets.ts                 # Asset API schemas and types
-│   ├── galleries.ts              # Gallery API schemas and canonical events
-│   ├── search.ts                 # Verso search and archive API contracts
-│   └── contracts/                # Shared recognition schemas and types
-├── data/
-│   ├── uploads/                  # Ignored local uploads
-│   └── recognition-results/      # Ignored local AI responses
-├── tools/
-│   ├── facerecognition_app/      # Existing Python proof of concept
-│   └── requirements.txt          # Python-only dependencies
-├── index.html
-├── package.json
-├── tsconfig.json
-├── tsconfig.server.json
-├── tsconfig.test.json
-├── vitest.config.ts
-├── BACKEND_IMPLEMENTATION_CHECKLIST.md
-└── vite.config.ts
-```
-
-## Gallery Asset
-
-The current prototype loads its sample image remotely from `assets.vogue.com`; the
-image is not stored in this repository. Keep photo credits visible and confirm content
-usage rights before introducing additional assets.
-
-## Offline Python Rekognition Tools
-
-The scripts under `tools/facerecognition_app/` are preserved as offline experimentation
-and benchmark utilities. The Express server does not execute them.
-
-### Python Setup
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r tools/requirements.txt
-```
-
-The scripts support `.jpg`, `.jpeg`, and `.png` images. The spreadsheet downloader also
-accepts `.webp` image URLs.
-
-### Recognize Images in a Folder
-
-```bash
-python3 tools/facerecognition_app/recognize_celebrities.py \
-  ~/Desktop/celeb-images
-```
-
-Save simplified results to JSON:
-
-```bash
-python3 tools/facerecognition_app/recognize_celebrities.py \
-  ~/Desktop/celeb-images \
-  --output results.json
-```
-
-### Download Spreadsheet Images
-
-The first worksheet must contain an `image_url` column. The optional `title` column is
-used to generate readable filenames.
-
-```bash
-.venv/bin/python tools/facerecognition_app/download_images_from_xlsx.py \
-  "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx"
-```
-
-Process only the first 10 rows:
-
-```bash
-.venv/bin/python tools/facerecognition_app/download_images_from_xlsx.py \
-  "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx" \
-  --limit 10
-```
-
-### Capture Raw Rekognition Results Incrementally
-
-This command downloads new spreadsheet images, skips previously processed rows, and
-appends one raw Rekognition record per image to `recognition_results.jsonl`:
-
-```bash
-PYTHONPATH=tools .venv/bin/python \
-  tools/facerecognition_app/capture_recognition_from_xlsx.py \
-  "~/Desktop/celeb-images/Input Files/vogue_metgala_redcarpet.xlsx"
-```
-
-Add `--limit 10` to restrict the run.
-
-### Curate Saved Results
-
-The curation script filters by Rekognition confidence and checks recognized names
-against image titles without calling AWS again:
-
-```bash
-.venv/bin/python tools/facerecognition_app/curate_recognition_results.py \
-  "~/Desktop/celeb-images/recognition_results.jsonl"
-```
-
-Override the default confidence threshold:
-
-```bash
-.venv/bin/python tools/facerecognition_app/curate_recognition_results.py \
-  "~/Desktop/celeb-images/recognition_results.jsonl" \
-  --min-confidence 75
-```
-
-### Search Curated Results
-
-```bash
-.venv/bin/python tools/facerecognition_app/search_curated_results.py \
-  "~/Desktop/celeb-images/curated_recognition_results.json" \
-  "Rihanna" \
-  --limit 5
-```
-
-## Collaboration Workflow
-
-1. Sync your fork with the upstream `main` branch.
-2. Create a branch such as `feat/gallery-page` or `feat/aws-rekognition`.
-3. Make focused changes and run `npm run typecheck`, `npm test`, and `npm run build`.
-4. Push the feature branch to your fork.
-5. Open a pull request against the upstream `main` branch.
-
-Do not push directly to `main`.
-
-## Security and Repository Hygiene
-
-Do not commit:
-
-- `.env` files or AWS credentials
-- Local database exports
-- Files under `data/uploads/`
-- Raw recognition-result files
-- Unapproved or unlicensed photographs
-- Python virtual environments
-- `node_modules/` or build output
-
-This repository is an internal hackathon prototype and does not currently include a
-license for external distribution.
+- `/admin/photos` is not yet a working photo library.
+- Upload-page preview cards do not persist across a refresh, although server assets do.
+- Celebrity archive pages are still placeholders.
+- `Featured In` uses the two existing static Vogue links; it is not supplied by the backend yet.
+- Search is exact name/alias matching rather than fuzzy or semantic search.
+- The current development setup uses local MongoDB and local file storage.
