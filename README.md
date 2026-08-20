@@ -207,12 +207,3 @@ shared/                 Contracts shared by client and server
 data/uploads/           Local uploaded image storage
 server/API.md           Detailed API documentation
 ```
-
-## Current limitations
-
-- `/admin/photos` is not yet a working photo library.
-- Upload-page preview cards do not persist across a refresh, although server assets do.
-- Celebrity archive pages are still placeholders.
-- `Featured In` uses the two existing static Vogue links; it is not supplied by the backend yet.
-- Search is exact name/alias matching rather than fuzzy or semantic search.
-- The current development setup uses local MongoDB and local file storage.
