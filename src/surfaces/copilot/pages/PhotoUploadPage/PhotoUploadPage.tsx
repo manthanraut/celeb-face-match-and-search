@@ -7,6 +7,10 @@ import {
 } from "../../../../features/assets/photoSelection";
 import { uploadPhotoAssets } from "../../../../features/assets/api";
 import {
+  FaceDetectionError,
+  imageContainsFace,
+} from "../../../../features/assets/faceDetection";
+import {
   MAX_ASSET_IMAGE_DIMENSION,
   MAX_ASSET_IMAGE_PIXELS,
   MAX_ASSET_UPLOAD_FILES,
@@ -36,8 +40,10 @@ export function PhotoUploadPage() {
     const files = Array.from(fileList);
     const acceptedFiles: File[] = [];
     let duplicateCount = 0;
+    let faceCheckErrorCount = 0;
     let invalidCount = 0;
     let limitCount = 0;
+    let noFaceCount = 0;
 
     files.forEach((file) => {
       const signature = createFileSignature(file);
@@ -73,12 +79,14 @@ export function PhotoUploadPage() {
     }
 
     setIsPreparing(true);
-    setMessage("Uploading images and queuing celebrity recognition…");
+    setMessage("Checking images for faces before upload…");
 
     const preparedPhotos = await Promise.all(
       acceptedFiles.map(async (file) => {
+        let selectedPhoto: SelectedPhoto | null = null;
+
         try {
-          const selectedPhoto = await createSelectedPhoto(file);
+          selectedPhoto = await createSelectedPhoto(file);
 
           if (
             selectedPhoto.width > MAX_ASSET_IMAGE_DIMENSION
@@ -91,10 +99,24 @@ export function PhotoUploadPage() {
             return null;
           }
 
+          if (!await imageContainsFace(file)) {
+            URL.revokeObjectURL(selectedPhoto.previewUrl);
+            selectedSignaturesRef.current.delete(createFileSignature(file));
+            noFaceCount += 1;
+            return null;
+          }
+
           return selectedPhoto;
-        } catch {
+        } catch (error) {
+          if (selectedPhoto !== null) {
+            URL.revokeObjectURL(selectedPhoto.previewUrl);
+          }
           selectedSignaturesRef.current.delete(createFileSignature(file));
-          invalidCount += 1;
+          if (error instanceof FaceDetectionError) {
+            faceCheckErrorCount += 1;
+          } else {
+            invalidCount += 1;
+          }
           return null;
         }
       }),
@@ -104,11 +126,18 @@ export function PhotoUploadPage() {
 
     if (validPhotos.length === 0) {
       setIsPreparing(false);
-      setMessage("The selected files did not meet the image upload requirements.");
+      if (faceCheckErrorCount > 0) {
+        setMessage("Face detection could not be completed. No images were uploaded. Try again.");
+      } else if (noFaceCount > 0) {
+        setMessage(`${noFaceCount} ${noFaceCount === 1 ? "image was" : "images were"} skipped because no face was detected.`);
+      } else {
+        setMessage("The selected files did not meet the image upload requirements.");
+      }
       return;
     }
 
     try {
+      setMessage("Uploading images and queuing celebrity recognition…");
       const assets = await uploadPhotoAssets(validPhotos.map((photo) => ({
         clientAssetId: photo.id,
         file: photo.file,
@@ -146,6 +175,12 @@ export function PhotoUploadPage() {
       }
       if (invalidCount > 0) {
         messageParts.push(`${invalidCount} invalid ${invalidCount === 1 ? "file was" : "files were"} skipped.`);
+      }
+      if (noFaceCount > 0) {
+        messageParts.push(`${noFaceCount} ${noFaceCount === 1 ? "image was" : "images were"} skipped because no face was detected.`);
+      }
+      if (faceCheckErrorCount > 0) {
+        messageParts.push(`${faceCheckErrorCount} ${faceCheckErrorCount === 1 ? "image could" : "images could"} not be checked and were not uploaded.`);
       }
       setMessage(messageParts.join(" "));
     } catch (error) {
@@ -224,7 +259,7 @@ export function PhotoUploadPage() {
               <UploadIcon />
               {isPreparing ? "Preparing…" : "Upload"}
             </label>
-            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Up to 5 MB each · Up to 10 images per upload</p>
+            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Must contain a face · Up to 5 MB each · Up to 10 images per upload</p>
           </div>
         </div>
 
