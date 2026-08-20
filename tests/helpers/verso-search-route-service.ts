@@ -7,6 +7,7 @@ export function createUnusedVersoSearchRouteService(): VersoSearchRouteService {
 
   return {
     getCelebrityArchive: unexpectedCall,
+    getDiscoveryHub: unexpectedCall,
     search: unexpectedCall,
   };
 }

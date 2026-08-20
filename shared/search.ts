@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { assetIdSchema, assetImageMimeTypeSchema } from "./assets.js";
+import {
+  assetIdSchema,
+  assetImageMimeTypeSchema,
+  MAX_ASSET_BACKSTORY_LENGTH,
+} from "./assets.js";
 import { canonicalEventIdSchema, galleryEventContextSchema, galleryIdSchema } from "./galleries.js";
 
 export const celebritySlugSchema = z
@@ -25,6 +29,12 @@ export const celebritySearchQuerySchema = z
 
 export const celebrityArchiveQuerySchema = z.object(searchPageQueryShape).strict();
 
+export const discoveryHubQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(20).default(10),
+  })
+  .strict();
+
 export const versoCelebritySchema = z.object({
   displayName: z.string().min(1),
   slug: celebritySlugSchema,
@@ -46,6 +56,7 @@ export const versoSearchAssetSchema = z.object({
   }),
   sourceText: z.object({
     altText: z.string().nullable(),
+    backstory: z.string().max(MAX_ASSET_BACKSTORY_LENGTH).nullable(),
     caption: z.string().nullable(),
     title: z.string().nullable(),
   }),
@@ -66,9 +77,23 @@ export const celebritySearchResponseSchema = z.object({
 
 export const celebrityArchiveResponseSchema = z.object(versoSearchPageShape);
 
+export const discoveryHubPersonSchema = z.object({
+  celebrity: versoCelebritySchema,
+  representativeImage: versoSearchAssetSchema,
+  total_count: z.number().int().nonnegative(),
+});
+
+export const discoveryHubResponseSchema = z.object({
+  people: z.array(discoveryHubPersonSchema),
+  suggestedSearches: z.array(versoCelebritySchema),
+});
+
 export type CelebrityArchiveQuery = z.infer<typeof celebrityArchiveQuerySchema>;
 export type CelebrityArchiveResponse = z.infer<typeof celebrityArchiveResponseSchema>;
 export type CelebritySearchQuery = z.infer<typeof celebritySearchQuerySchema>;
 export type CelebritySearchResponse = z.infer<typeof celebritySearchResponseSchema>;
+export type DiscoveryHubPerson = z.infer<typeof discoveryHubPersonSchema>;
+export type DiscoveryHubQuery = z.infer<typeof discoveryHubQuerySchema>;
+export type DiscoveryHubResponse = z.infer<typeof discoveryHubResponseSchema>;
 export type VersoCelebrity = z.infer<typeof versoCelebritySchema>;
 export type VersoSearchAsset = z.infer<typeof versoSearchAssetSchema>;

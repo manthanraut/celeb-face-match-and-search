@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   CelebrityCatalogEntry,
   CelebrityLookupRepository,
+  CelebrityRepository,
 } from "../../server/repositories/CelebrityRepository.js";
 import type {
   VersoSearchRepository,
@@ -16,6 +17,27 @@ const RIHANNA: CelebrityCatalogEntry = {
   normalizedName: "rihanna",
   providerIdentities: [],
   slug: "rihanna",
+};
+const ANNE_HATHAWAY: CelebrityCatalogEntry = {
+  displayName: "Anne Hathaway",
+  normalizedAliases: [],
+  normalizedName: "anne hathaway",
+  providerIdentities: [],
+  slug: "anne-hathaway",
+};
+const DOJA_CAT: CelebrityCatalogEntry = {
+  displayName: "Doja Cat",
+  normalizedAliases: [],
+  normalizedName: "doja cat",
+  providerIdentities: [],
+  slug: "doja-cat",
+};
+const ZENDAYA: CelebrityCatalogEntry = {
+  displayName: "Zendaya",
+  normalizedAliases: [],
+  normalizedName: "zendaya",
+  providerIdentities: [],
+  slug: "zendaya",
 };
 const ITEM: VersoSearchRepositoryItem = {
   addedAt: new Date("2027-05-04T12:00:00.000Z"),
@@ -49,26 +71,62 @@ const ITEM: VersoSearchRepositoryItem = {
   originalFilename: "rihanna.jpg",
   sourceText: {
     altText: "Rihanna on the red carpet",
+    backstory: "Rihanna arrived early for a quiet portrait before the red carpet.",
     caption: "Rihanna arrives at the Met Gala",
     title: "Rihanna",
   },
   year: 2027,
 };
 
+function createRepresentativeItem(
+  celebrity: CelebrityCatalogEntry,
+  assetId: string,
+): VersoSearchRepositoryItem {
+  return {
+    ...ITEM,
+    assetId,
+    associations: [{
+      ...ITEM.associations[0],
+      displayName: celebrity.displayName,
+      identityKey: celebrity.slug,
+      providerPersonId: `person-${celebrity.slug}`,
+    }],
+    galleryId: `${celebrity.slug}-gallery`,
+    originalFilename: `${celebrity.slug}.jpg`,
+    sourceText: {
+      altText: `${celebrity.displayName} on the red carpet`,
+      backstory: `${celebrity.displayName} was photographed before the red carpet.`,
+      caption: `${celebrity.displayName} arrives at the Met Gala`,
+      title: celebrity.displayName,
+    },
+  };
+}
+
 function createHarness(options: {
+  catalog?: CelebrityCatalogEntry[];
   identityMatches?: CelebrityCatalogEntry[];
   repositoryPage?: Awaited<ReturnType<VersoSearchRepository["findApprovedCelebrityUsages"]>>;
+  repositoryPagesBySlug?: Record<
+    string,
+    Awaited<ReturnType<VersoSearchRepository["findApprovedCelebrityUsages"]>>
+  >;
   slugMatch?: CelebrityCatalogEntry | null;
   totalCount?: number;
+  totalCountsBySlug?: Record<string, number>;
 } = {}) {
-  const celebrityRepository: CelebrityLookupRepository = {
+  const celebrityRepository: CelebrityLookupRepository & CelebrityRepository = {
     findByNormalizedIdentity: vi.fn(async () => options.identityMatches ?? [RIHANNA]),
     findBySlug: vi.fn(async () => options.slugMatch === undefined ? RIHANNA : options.slugMatch),
+    list: vi.fn(async () => options.catalog ?? [RIHANNA]),
   };
   const searchRepository: VersoSearchRepository = {
-    countApprovedCelebrityAssets: vi.fn(async () => options.totalCount ?? 1),
-    findApprovedCelebrityUsages: vi.fn(async () =>
-      options.repositoryPage ?? { hasMore: false, items: [ITEM] },
+    countApprovedCelebrityAssets: vi.fn(async ({ celebritySlug }) =>
+      options.totalCountsBySlug?.[celebritySlug] ?? options.totalCount ?? 1,
+    ),
+    findApprovedCelebrityUsages: vi.fn(async ({ celebritySlug }) =>
+      options.repositoryPagesBySlug?.[celebritySlug]
+      ?? options.repositoryPage
+      ?? { hasMore: false, items: [ITEM] },
     ),
   };
   const service = new VersoSearchService({ celebrityRepository, searchRepository });
@@ -127,6 +185,75 @@ describe("VersoSearchService", () => {
       decisionEngineVersion: 2,
       filters: { event: "met-gala", year: 2027 },
     });
+  });
+
+  it("builds a ranked discovery hub from celebrities with approved public images", async () => {
+    const anneItem = createRepresentativeItem(
+      ANNE_HATHAWAY,
+      "64b000000000000000000002",
+    );
+    const zendayaItem = createRepresentativeItem(
+      ZENDAYA,
+      "64b000000000000000000003",
+    );
+    const { celebrityRepository, searchRepository, service } = createHarness({
+      catalog: [RIHANNA, DOJA_CAT, ZENDAYA, ANNE_HATHAWAY],
+      repositoryPagesBySlug: {
+        "anne-hathaway": { hasMore: true, items: [anneItem] },
+        "doja-cat": { hasMore: false, items: [] },
+        rihanna: { hasMore: true, items: [ITEM] },
+        zendaya: { hasMore: true, items: [zendayaItem] },
+      },
+      totalCountsBySlug: {
+        "anne-hathaway": 5,
+        "doja-cat": 0,
+        rihanna: 2,
+        zendaya: 5,
+      },
+    });
+
+    const response = await service.getDiscoveryHub({ limit: 2 });
+
+    expect(response).toMatchObject({
+      people: [
+        {
+          celebrity: { displayName: "Anne Hathaway", slug: "anne-hathaway" },
+          representativeImage: {
+            assetId: anneItem.assetId,
+            links: { image: `/api/assets/${anneItem.assetId}/image` },
+            sourceText: anneItem.sourceText,
+          },
+          total_count: 5,
+        },
+        {
+          celebrity: { displayName: "Zendaya", slug: "zendaya" },
+          representativeImage: {
+            assetId: zendayaItem.assetId,
+            links: { image: `/api/assets/${zendayaItem.assetId}/image` },
+            sourceText: zendayaItem.sourceText,
+          },
+          total_count: 5,
+        },
+      ],
+      suggestedSearches: [
+        { displayName: "Anne Hathaway", slug: "anne-hathaway" },
+        { displayName: "Zendaya", slug: "zendaya" },
+        { displayName: "Rihanna", slug: "rihanna" },
+      ],
+    });
+    for (const person of response.people) {
+      expect(person.representativeImage.sourceText.backstory).toEqual(expect.any(String));
+    }
+    expect(celebrityRepository.list).toHaveBeenCalledOnce();
+    expect(searchRepository.findApprovedCelebrityUsages).toHaveBeenCalledTimes(4);
+    expect(searchRepository.findApprovedCelebrityUsages).toHaveBeenCalledWith({
+      celebritySlug: "anne-hathaway",
+      cursor: undefined,
+      decisionEngineVersion: 2,
+      filters: { event: undefined, year: undefined },
+      limit: 1,
+    });
+    expect(searchRepository.countApprovedCelebrityAssets).toHaveBeenCalledTimes(4);
   });
 
   it("returns an empty resolved response for an unknown query", async () => {
