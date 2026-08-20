@@ -22,7 +22,7 @@ export class MongoCelebrityRepository implements CelebrityRepository, CelebrityL
   }
 
   async findByNormalizedIdentity(normalizedIdentity: string): Promise<CelebrityCatalogEntry[]> {
-    const documents = await this.#celebrities
+    const exactMatches = await this.#celebrities
       .find({
         $or: [
           { normalizedAliases: normalizedIdentity },
@@ -32,13 +32,32 @@ export class MongoCelebrityRepository implements CelebrityRepository, CelebrityL
       .sort({ normalizedName: 1 })
       .limit(2)
       .toArray();
-    return documents.map(toCatalogEntry);
+    if (exactMatches.length > 0) {
+      return exactMatches.map(toCatalogEntry);
+    }
+
+    const prefix = new RegExp(`^${escapeRegularExpression(normalizedIdentity)}`, "u");
+    const prefixMatches = await this.#celebrities
+      .find({
+        $or: [
+          { normalizedAliases: prefix },
+          { normalizedName: prefix },
+        ],
+      })
+      .sort({ normalizedName: 1 })
+      .limit(2)
+      .toArray();
+    return prefixMatches.map(toCatalogEntry);
   }
 
   async findBySlug(slug: string): Promise<CelebrityCatalogEntry | null> {
     const document = await this.#celebrities.findOne({ slug });
     return document ? toCatalogEntry(document) : null;
   }
+}
+
+function escapeRegularExpression(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function toCatalogEntry(document: WithId<CelebrityDocument>): CelebrityCatalogEntry {

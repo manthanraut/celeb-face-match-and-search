@@ -955,6 +955,12 @@ describeWithMongo("MongoDB foundation", () => {
     await expect(
       celebrities!.findByNormalizedIdentity("robyn rihanna fenty"),
     ).resolves.toMatchObject([{ displayName: "Rihanna", slug: "rihanna" }]);
+    await expect(celebrities!.findByNormalizedIdentity("riha")).resolves.toMatchObject([
+      { displayName: "Rihanna", slug: "rihanna" },
+    ]);
+    await expect(celebrities!.findByNormalizedIdentity("robyn riha")).resolves.toMatchObject([
+      { displayName: "Rihanna", slug: "rihanna" },
+    ]);
     await expect(celebrities!.findByNormalizedIdentity("unknown")).resolves.toEqual([]);
     await expect(celebrities!.findBySlug("rihanna")).resolves.toMatchObject({
       displayName: "Rihanna",
