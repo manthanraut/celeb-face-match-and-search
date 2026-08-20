@@ -513,8 +513,9 @@ Legacy MongoDB associations that predate `searchDecision` are interpreted using 
 | `sourceText.title` | string or `null` | Current title. |
 | `sourceText.caption` | string or `null` | Current caption. |
 | `sourceText.altText` | string or `null` | Current alt text. |
+| `sourceText.backstory` | string or `null` | Public editorial context shown with the search result. |
 
-Backstory is private editorial context on the asset detail and is intentionally not included in search results.
+Backstory is returned in search results so Verso can present the editorial context saved in Copilot.
 
 Celebrity object:
 
@@ -551,6 +552,7 @@ interface GalleryEvent {
 | `GET` | `/api/galleries/assets/:assetId/event-metadata` | Retrieve the image's latest persisted content event. |
 | `PUT` | `/api/galleries/:galleryId/context` | Synchronize the complete gallery snapshot. |
 | `DELETE` | `/api/galleries/:galleryId/assets/:assetId` | Remove one asset/gallery association. |
+| `GET` | `/api/discovery` | Retrieve ranked celebrities with representative searchable images. |
 | `GET` | `/api/search` | Resolve a celebrity name or alias and search published images. |
 | `GET` | `/api/celebrities/:celebritySlug` | Retrieve a canonical celebrity archive. |
 
@@ -1682,9 +1684,15 @@ Errors:
 
 ## Search and celebrity APIs
 
-Both retrieval endpoints return one result per published gallery usage, not one result per unique asset. If one asset belongs to multiple matching published galleries, it can appear more than once with different `sourceGallery` values.
+The search and celebrity archive endpoints return one result per published gallery usage, not one
+result per unique asset. If one asset belongs to multiple matching published galleries, it can appear
+more than once with different `sourceGallery` values.
 
-Both responses include `total_count`, which counts distinct matching asset IDs across all pages for the current celebrity, event, and year filters. It uses the same eligibility rules as the result list, including `hideFromSearch`, but it does not count the same image more than once when that image has multiple matching gallery usages. The count does not change as the client follows `nextCursor` through the same filtered result set.
+Those responses include `total_count`, which counts distinct matching asset IDs across all pages for
+the current celebrity, event, and year filters. It uses the same eligibility rules as the result list,
+including `hideFromSearch`, but it does not count the same image more than once when that image has
+multiple matching gallery usages. The count does not change as the client follows `nextCursor` through
+the same filtered result set.
 
 Only records satisfying all of the following are returned:
 
@@ -1697,6 +1705,52 @@ Only records satisfying all of the following are returned:
 - Optional event and year filters match the gallery usage.
 
 Results are ordered by `sourceGallery.addedAt` descending, then asset ID descending, then gallery ID descending.
+
+### Get discovery hub
+
+Returns celebrities that currently have at least one publicly searchable image. People are ranked by
+distinct searchable image count descending, then celebrity display name. `suggestedSearches` contains
+the first three eligible celebrities in the same order.
+
+| Property | Value |
+| --- | --- |
+| Method | `GET` |
+| Path | `/api/discovery` |
+| Authentication | None |
+| Required headers | None |
+| Body | None |
+
+Query parameters:
+
+| Name | Type | Required | Default | Constraints |
+| --- | --- | --- | --- | --- |
+| `limit` | integer | No | `10` | 1–20. Limits `people`; suggestions still use the first three eligible celebrities. |
+
+Unknown query parameters are rejected.
+
+Success response — `200 OK`:
+
+```typescript
+{
+  people: Array<{
+    celebrity: Celebrity;
+    representativeImage: SearchAsset;
+    total_count: number;
+  }>;
+  suggestedSearches: Celebrity[];
+}
+```
+
+`representativeImage` is the newest eligible gallery usage for that celebrity and follows the
+public `SearchAsset` contract, including editorial backstory when present on the asset. Legacy assets
+without a stored backstory are normalized to `null`; recognition internals are never exposed.
+
+Errors:
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `400` | `VALIDATION_ERROR` | Invalid limit or unknown query field. |
+| `500` | `INTERNAL_SERVER_ERROR` | Unexpected MongoDB failure or malformed persisted data. |
 
 ### Search by celebrity name or alias
 
@@ -1781,6 +1835,7 @@ Success response — `200 OK`:
       },
       "sourceText": {
         "altText": "Rihanna on the red carpet.",
+        "backstory": "An editor-provided note about this red-carpet moment.",
         "caption": "Rihanna arrives at the Met Gala.",
         "title": "Rihanna in Marc Jacobs"
       }
@@ -1903,6 +1958,7 @@ Success response — `200 OK`:
       },
       "sourceText": {
         "altText": null,
+        "backstory": "Rihanna was photographed backstage before the ceremony.",
         "caption": "Rihanna at the Oscars.",
         "title": "Rihanna in custom couture"
       }

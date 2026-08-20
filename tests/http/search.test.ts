@@ -14,6 +14,10 @@ function createSearchService(): VersoSearchRouteService {
       nextCursor: null,
       total_count: 0,
     })),
+    getDiscoveryHub: vi.fn(async () => ({
+      people: [],
+      suggestedSearches: [],
+    })),
     search: vi.fn(async (query) => ({
       celebrity: { displayName: "Rihanna", slug: "rihanna" },
       items: [],
@@ -37,6 +41,43 @@ async function startSearchApi(versoSearchService: VersoSearchRouteService) {
 }
 
 describe("Verso search API", () => {
+  it("validates and delegates discovery hub limits", async () => {
+    const service = createSearchService();
+    const testServer = await startSearchApi(service);
+
+    try {
+      const defaultResponse = await fetch(`${testServer.baseUrl}/api/discovery`);
+      const limitedResponse = await fetch(`${testServer.baseUrl}/api/discovery?limit=4`);
+
+      expect(defaultResponse.status).toBe(200);
+      await expect(defaultResponse.json()).resolves.toEqual({
+        people: [],
+        suggestedSearches: [],
+      });
+      expect(limitedResponse.status).toBe(200);
+      expect(service.getDiscoveryHub).toHaveBeenNthCalledWith(1, { limit: 10 });
+      expect(service.getDiscoveryHub).toHaveBeenNthCalledWith(2, { limit: 4 });
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("rejects invalid discovery hub query parameters", async () => {
+    const service = createSearchService();
+    const testServer = await startSearchApi(service);
+
+    try {
+      const invalidLimit = await fetch(`${testServer.baseUrl}/api/discovery?limit=21`);
+      const unknownParameter = await fetch(`${testServer.baseUrl}/api/discovery?event=met-gala`);
+
+      expect(invalidLimit.status).toBe(400);
+      expect(unknownParameter.status).toBe(400);
+      expect(service.getDiscoveryHub).not.toHaveBeenCalled();
+    } finally {
+      await testServer.close();
+    }
+  });
+
   it("validates and delegates celebrity search filters", async () => {
     const service = createSearchService();
     const testServer = await startSearchApi(service);

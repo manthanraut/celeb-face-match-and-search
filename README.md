@@ -126,6 +126,7 @@ Search currently matches normalized celebrity names and aliases exactly. It is n
 | `PATCH /api/assets/:assetId/metadata` | Ready | Save editorial metadata and recalculate celebrity decisions |
 | `PUT /api/galleries/:galleryId/context` | Ready | Synchronize gallery tags, publication state, and assets |
 | `DELETE /api/galleries/:galleryId/assets/:assetId` | Ready | Remove an asset from a gallery |
+| `GET /api/discovery` | Ready | Return ranked searchable celebrities and representative images |
 | `GET /api/search` | Ready | Resolve a celebrity name or alias and return matching images |
 | `GET /api/celebrities/:celebritySlug` | Ready | Return a filtered celebrity archive |
 

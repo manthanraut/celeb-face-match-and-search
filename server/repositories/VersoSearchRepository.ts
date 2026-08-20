@@ -24,6 +24,7 @@ export interface VersoSearchRepositoryItem {
   originalFilename: string;
   sourceText: {
     altText: string | null;
+    backstory: string | null;
     caption: string | null;
     title: string | null;
   };
