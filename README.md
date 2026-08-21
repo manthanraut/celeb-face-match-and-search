@@ -69,8 +69,8 @@ Use `npm run dev` for the complete application. `npm run dev:client` starts only
 ## Main workflow
 
 1. Select 1–10 JPEG or PNG files from `/admin/photos/new`.
-2. Copilot runs a local MediaPipe face check. Images without a detected face are not uploaded or sent to AWS.
-3. The server stores each accepted asset and queues celebrity recognition.
+2. Copilot runs a local MediaPipe face check before requesting celebrity recognition.
+3. The server stores every valid asset. Images with a detected face are queued for recognition; other images remain editable in Copilot without being sent to AWS.
 4. Open `/admin/photos/:assetId` to review the result, edit metadata, and control `Hide from search`.
 5. Add the image to event content and use the page-level **Save** action to persist the event publication.
 6. Eligible assets appear in Verso at `/discover` and in `/api/search` results.
@@ -80,13 +80,12 @@ The cards shown immediately after upload are temporary page state. Refreshing th
 ### Upload limits
 
 - JPEG or PNG only
-- At least one locally detected face
 - Maximum 10 files per request
 - Maximum 5 MiB per file
 - Maximum 10,000 pixels on either edge
 - Maximum 50 megapixels
 
-The browser downloads MediaPipe runtime/model assets on the first face check. Image pixels remain in the browser during this preflight; only accepted files are posted to the application API.
+The browser downloads MediaPipe runtime/model assets on the first face check. Image pixels remain in the browser during this preflight. Face-free images are still uploaded as general Copilot assets, but their recognition status is `SKIPPED` and they are not queued for AWS Rekognition.
 
 ## Search eligibility
 

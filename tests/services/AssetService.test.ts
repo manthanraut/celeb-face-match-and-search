@@ -357,6 +357,31 @@ describe("AssetService ingestion", () => {
     expect(secondRecord?.sourceText.title).toBeTruthy();
   });
 
+  it("stores face-free images without queuing celebrity recognition", async () => {
+    const { repository, service } = createHarness();
+
+    const result = await service.ingest([{
+      buffer: JPEG,
+      clientAssetId: FIRST_CLIENT_ID,
+      originalFilename: "venue.jpg",
+      recognitionRequested: false,
+    }]);
+
+    expect(repository.insert).toHaveBeenCalledWith(expect.objectContaining({
+      recognition: {
+        attemptNumber: 0,
+        completedAt: FIXED_TIME,
+        provider: "aws-rekognition",
+        revision: 1,
+        status: "SKIPPED",
+      },
+    }));
+    expect(result.assets[0]).toMatchObject({
+      originalFilename: "venue.jpg",
+      recognitionStatus: "SKIPPED",
+    });
+  });
+
   it("returns a matching idempotent upload without writing it again", async () => {
     const { repository, service, storage } = createHarness();
     const existing = makeRecord();

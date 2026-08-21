@@ -18,6 +18,7 @@ export const assetRecognitionStatusSchema = z.enum([
   "QUEUED",
   "PROCESSING",
   "SUCCEEDED",
+  "SKIPPED",
   "FAILED",
   "INDETERMINATE",
 ]);
@@ -108,6 +109,7 @@ export const assetUploadManifestSchema = z
   .array(
     z.object({
       clientAssetId: clientAssetIdSchema,
+      recognitionRequested: z.boolean().default(true),
     }),
   )
   .min(1)

@@ -130,7 +130,7 @@ describe("asset API", () => {
       "manifest",
       JSON.stringify([
         { clientAssetId: CLIENT_ASSET_ID },
-        { clientAssetId: secondClientAssetId },
+        { clientAssetId: secondClientAssetId, recognitionRequested: false },
       ]),
     );
 
@@ -147,11 +147,13 @@ describe("asset API", () => {
           buffer: PNG_BYTES,
           clientAssetId: CLIENT_ASSET_ID,
           originalFilename: "001-rihanna-at-the-met-gala.png",
+          recognitionRequested: true,
         },
         {
           buffer: Buffer.from([0xff, 0xd8, 0xff]),
           clientAssetId: secondClientAssetId,
           originalFilename: "zendaya.jpg",
+          recognitionRequested: false,
         },
       ]);
     } finally {

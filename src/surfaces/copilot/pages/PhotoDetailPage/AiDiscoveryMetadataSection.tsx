@@ -59,6 +59,7 @@ function StatusBadge({
 function statusTone(status: AssetDetail["recognition"]["status"]) {
   if (status === "SUCCEEDED") return "green" as const;
   if (status === "FAILED") return "red" as const;
+  if (status === "SKIPPED") return "neutral" as const;
   return "amber" as const;
 }
 
@@ -68,6 +69,7 @@ function statusLabel(status: AssetDetail["recognition"]["status"]) {
     INDETERMINATE: "Needs Attention",
     PROCESSING: "Analyzing",
     QUEUED: "Queued",
+    SKIPPED: "Skipped",
     SUCCEEDED: "Ready",
   }[status];
 }
@@ -155,6 +157,7 @@ export function AiDiscoveryMetadataSection({
   const isActive = isRecognitionActive || isEnrichmentPending;
   const isFailure = asset.recognition.status === "FAILED"
     || asset.recognition.status === "INDETERMINATE";
+  const isSkipped = asset.recognition.status === "SKIPPED";
   const associations = asset.enrichment.associations;
   const hasApprovedSearchDecision = associations.some(
     ({ searchDecision }) => searchDecision === "APPROVED",
@@ -201,6 +204,12 @@ export function AiDiscoveryMetadataSection({
           {asset.recognition.lastError?.message ?? "The recognition result could not be established safely."}
         </p>
       ) : null}
+      {isSkipped ? (
+        <p className="mt-4 border-l-4 border-neutral-500 bg-neutral-100 px-4 py-3 text-sm text-neutral-800" role="status">
+          <strong>Celebrity recognition was skipped by the local face precheck.</strong>{" "}
+          The image remains available for editorial metadata, content, and other Copilot operations.
+        </p>
+      ) : null}
       {isActive ? (
         <p className="mt-4 border-l-4 border-[#7c34f5] bg-violet-50 px-4 py-3 text-sm text-violet-950" role="status">
           {isRecognitionActive
@@ -211,28 +220,28 @@ export function AiDiscoveryMetadataSection({
       {isActive ? <RecognitionLoadingSkeleton /> : null}
 
       <div className={isActive ? "hidden" : "contents"}>
-        <div className="mt-4 grid gap-2 rounded-md border-l-4 border-[#7c34f5] bg-violet-50 px-4 py-3 text-xs leading-5 text-violet-950 sm:grid-cols-3">
+        {!isSkipped ? <div className="mt-4 grid gap-2 rounded-md border-l-4 border-[#7c34f5] bg-violet-50 px-4 py-3 text-xs leading-5 text-violet-950 sm:grid-cols-3">
           <p><strong>Configured threshold or higher:</strong> automatically approved.</p>
           <p><strong>Below the threshold:</strong> approved only when title or caption confirms the name.</p>
           <p><strong>No AI match:</strong> supported metadata can create an approved association.</p>
-        </div>
+        </div> : null}
 
         <dl className="mt-4 grid overflow-hidden rounded-md border border-neutral-300 sm:grid-cols-2 lg:grid-cols-4">
           <div className="border-b border-neutral-300 p-3 sm:border-r lg:border-b-0">
             <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Provider</dt>
-            <dd className="mt-1 text-sm font-bold">{providerLabel(asset.recognition.provider)}</dd>
+            <dd className="mt-1 text-sm font-bold">{isSkipped ? "Not run" : providerLabel(asset.recognition.provider)}</dd>
           </div>
           <div className="border-b border-neutral-300 p-3 lg:border-b-0 lg:border-r">
             <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Analysis Status</dt>
             <dd className="mt-1 text-sm font-bold">{statusLabel(asset.recognition.status)}</dd>
           </div>
           <div className="border-b border-neutral-300 p-3 sm:border-b-0 sm:border-r">
-            <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Last Analyzed</dt>
+            <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">{isSkipped ? "Preflight Completed" : "Last Analyzed"}</dt>
             <dd className="mt-1 text-sm font-bold tabular-nums">{formatAnalyzedAt(asset.recognition.completedAt)}</dd>
           </div>
           <div className="p-3">
             <dt className="text-[0.65rem] font-bold uppercase tracking-[0.04em] text-neutral-500">Auto-Approve Threshold</dt>
-            <dd className="mt-1 text-sm font-bold">Server configured</dd>
+            <dd className="mt-1 text-sm font-bold">{isSkipped ? "Not applicable" : "Server configured"}</dd>
           </div>
         </dl>
 

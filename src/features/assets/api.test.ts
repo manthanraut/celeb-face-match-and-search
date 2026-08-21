@@ -112,6 +112,7 @@ describe("asset API client", () => {
     const assets = await uploadPhotoAssets([{
       clientAssetId: "f167c99c-9ad0-4f3d-aad4-bf19cbe15a90",
       file,
+      recognitionRequested: false,
     }]);
 
     expect(assets).toHaveLength(1);
@@ -124,6 +125,7 @@ describe("asset API client", () => {
     expect(formData.getAll("images")).toHaveLength(1);
     expect(JSON.parse(String(formData.get("manifest")))).toEqual([{
       clientAssetId: "f167c99c-9ad0-4f3d-aad4-bf19cbe15a90",
+      recognitionRequested: false,
     }]);
   });
 

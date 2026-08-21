@@ -352,7 +352,8 @@ Routes do not access MongoDB directly. Services coordinate domain behavior, repo
 POST /api/assets
   -> validate all image bytes and manifest entries
   -> write each new image to local storage
-  -> insert asset with recognition.status = QUEUED
+  -> insert asset as QUEUED when recognition is requested
+     or SKIPPED when the client preflight declines recognition
   -> return immediately
 
 Background recognition worker
@@ -416,6 +417,7 @@ Recognition status values:
 | `QUEUED` | Waiting for an eligible worker attempt. |
 | `PROCESSING` | Claimed by a worker under a lease. |
 | `SUCCEEDED` | A normalized provider result was stored. |
+| `SKIPPED` | The asset was stored without queuing a recognition-provider request. |
 | `FAILED` | Recognition ended in a known terminal failure. |
 | `INDETERMINATE` | The final outcome could not be established safely. |
 
@@ -662,7 +664,7 @@ MongoDB connection details and credentials are not included in the failure respo
 
 ### Upload assets
 
-Uploads one to ten images, persists each new image and asset record, and queues recognition. The response does not wait for recognition.
+Uploads one to ten images and persists each new image and asset record. Recognition is queued only for manifest entries where `recognitionRequested` is `true`. The response does not wait for recognition.
 
 | Property | Value |
 | --- | --- |
@@ -684,10 +686,11 @@ Manifest schema:
 ```typescript
 Array<{
   clientAssetId: string; // UUID
+  recognitionRequested?: boolean; // defaults to true
 }>
 ```
 
-Each UUID must be unique within the request. Extra fields inside a manifest entry are not part of the public contract and should not be sent.
+Each UUID must be unique within the request. Setting `recognitionRequested` to `false` stores the image with recognition status `SKIPPED`; the recognition worker will not claim it or call the configured provider.
 
 Example request:
 
@@ -1130,7 +1133,7 @@ Errors:
 | --- | --- | --- |
 | `400` | `VALIDATION_ERROR` | Malformed asset ID. |
 | `404` | `ASSET_NOT_FOUND` | Asset does not exist. |
-| `409` | `RECOGNITION_RETRY_NOT_ALLOWED` | State is `QUEUED`, `PROCESSING`, or `SUCCEEDED`. |
+| `409` | `RECOGNITION_RETRY_NOT_ALLOWED` | State is `QUEUED`, `PROCESSING`, `SUCCEEDED`, or `SKIPPED`. |
 | `500` | `INTERNAL_SERVER_ERROR` | Unexpected database failure. |
 
 Example conflict:

@@ -53,6 +53,7 @@ export function createAssetRouter(
         buffer: file.buffer,
         clientAssetId: manifest[index].clientAssetId,
         originalFilename: file.originalname,
+        recognitionRequested: manifest[index].recognitionRequested,
       }));
       const result = await assetService.ingest(uploads);
 
