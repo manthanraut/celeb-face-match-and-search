@@ -43,6 +43,7 @@ const assetRecognitionStatusSchema = z.enum([
   "QUEUED",
   "PROCESSING",
   "SUCCEEDED",
+  "SKIPPED",
   "FAILED",
   "INDETERMINATE",
 ]);

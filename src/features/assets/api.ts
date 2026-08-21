@@ -20,6 +20,7 @@ import {
 export interface UploadPhotoAssetInput {
   clientAssetId: string;
   file: File;
+  recognitionRequested: boolean;
 }
 
 interface ApiErrorEnvelope {
@@ -108,9 +109,9 @@ export async function uploadPhotoAssets(
   inputs: readonly UploadPhotoAssetInput[],
 ): Promise<AssetUploadResult[]> {
   const formData = new FormData();
-  const manifest = inputs.map(({ clientAssetId, file }) => {
+  const manifest = inputs.map(({ clientAssetId, file, recognitionRequested }) => {
     formData.append("images", file, file.name);
-    return { clientAssetId };
+    return { clientAssetId, recognitionRequested };
   });
 
   formData.append("manifest", JSON.stringify(manifest));

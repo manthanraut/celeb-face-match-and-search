@@ -7,6 +7,10 @@ import {
 } from "../../../../features/assets/photoSelection";
 import { uploadPhotoAssets } from "../../../../features/assets/api";
 import {
+  FaceDetectionError,
+  imageContainsFace,
+} from "../../../../features/assets/faceDetection";
+import {
   MAX_ASSET_IMAGE_DIMENSION,
   MAX_ASSET_IMAGE_PIXELS,
   MAX_ASSET_UPLOAD_FILES,
@@ -16,6 +20,11 @@ import {
 import { SelectedPhotoCard } from "./SelectedPhotoCard";
 
 const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
+
+interface PreparedPhotoUpload {
+  photo: SelectedPhoto;
+  recognitionRequested: boolean;
+}
 
 function UploadIcon() {
   return (
@@ -36,8 +45,10 @@ export function PhotoUploadPage() {
     const files = Array.from(fileList);
     const acceptedFiles: File[] = [];
     let duplicateCount = 0;
+    let faceCheckErrorCount = 0;
     let invalidCount = 0;
     let limitCount = 0;
+    let noFaceCount = 0;
 
     files.forEach((file) => {
       const signature = createFileSignature(file);
@@ -73,12 +84,14 @@ export function PhotoUploadPage() {
     }
 
     setIsPreparing(true);
-    setMessage("Uploading images and queuing celebrity recognition…");
+    setMessage("Checking images for faces before upload…");
 
     const preparedPhotos = await Promise.all(
       acceptedFiles.map(async (file) => {
+        let selectedPhoto: SelectedPhoto | null = null;
+
         try {
-          const selectedPhoto = await createSelectedPhoto(file);
+          selectedPhoto = await createSelectedPhoto(file);
 
           if (
             selectedPhoto.width > MAX_ASSET_IMAGE_DIMENSION
@@ -91,8 +104,25 @@ export function PhotoUploadPage() {
             return null;
           }
 
-          return selectedPhoto;
-        } catch {
+          let recognitionRequested = false;
+          try {
+            recognitionRequested = await imageContainsFace(file);
+            if (!recognitionRequested) {
+              noFaceCount += 1;
+            }
+          } catch (error) {
+            if (error instanceof FaceDetectionError) {
+              faceCheckErrorCount += 1;
+            } else {
+              throw error;
+            }
+          }
+
+          return { photo: selectedPhoto, recognitionRequested };
+        } catch (error) {
+          if (selectedPhoto !== null) {
+            URL.revokeObjectURL(selectedPhoto.previewUrl);
+          }
           selectedSignaturesRef.current.delete(createFileSignature(file));
           invalidCount += 1;
           return null;
@@ -100,25 +130,29 @@ export function PhotoUploadPage() {
       }),
     );
 
-    const validPhotos = preparedPhotos.filter((photo): photo is SelectedPhoto => photo !== null);
+    const preparedUploads = preparedPhotos.filter(
+      (upload): upload is PreparedPhotoUpload => upload !== null,
+    );
 
-    if (validPhotos.length === 0) {
+    if (preparedUploads.length === 0) {
       setIsPreparing(false);
       setMessage("The selected files did not meet the image upload requirements.");
       return;
     }
 
     try {
-      const assets = await uploadPhotoAssets(validPhotos.map((photo) => ({
+      setMessage("Uploading images…");
+      const assets = await uploadPhotoAssets(preparedUploads.map(({ photo, recognitionRequested }) => ({
         clientAssetId: photo.id,
         file: photo.file,
+        recognitionRequested,
       })));
 
-      if (assets.length !== validPhotos.length) {
+      if (assets.length !== preparedUploads.length) {
         throw new Error("The server returned an incomplete upload response.");
       }
 
-      const uploadedPhotos = validPhotos.map((photo, index) => {
+      const uploadedPhotos = preparedUploads.map(({ photo }, index) => {
         const asset = assets[index];
         if (!asset) {
           throw new Error("The server returned an incomplete upload response.");
@@ -137,7 +171,11 @@ export function PhotoUploadPage() {
 
       setSelectedPhotos((currentPhotos) => [...currentPhotos, ...uploadedPhotos]);
 
-      const messageParts = [`${uploadedPhotos.length} ${uploadedPhotos.length === 1 ? "image was" : "images were"} uploaded and queued for recognition.`];
+      const recognitionCount = preparedUploads.length - noFaceCount - faceCheckErrorCount;
+      const messageParts = [`${uploadedPhotos.length} ${uploadedPhotos.length === 1 ? "image was" : "images were"} uploaded.`];
+      if (recognitionCount > 0) {
+        messageParts.push(`${recognitionCount} ${recognitionCount === 1 ? "image was" : "images were"} queued for celebrity recognition.`);
+      }
       if (duplicateCount > 0) {
         messageParts.push(`${duplicateCount} duplicate ${duplicateCount === 1 ? "was" : "were"} skipped.`);
       }
@@ -147,9 +185,15 @@ export function PhotoUploadPage() {
       if (invalidCount > 0) {
         messageParts.push(`${invalidCount} invalid ${invalidCount === 1 ? "file was" : "files were"} skipped.`);
       }
+      if (noFaceCount > 0) {
+        messageParts.push(`Recognition was skipped for ${noFaceCount} ${noFaceCount === 1 ? "image" : "images"} because no face was detected.`);
+      }
+      if (faceCheckErrorCount > 0) {
+        messageParts.push(`Recognition was skipped for ${faceCheckErrorCount} ${faceCheckErrorCount === 1 ? "image" : "images"} because the local face check could not be completed.`);
+      }
       setMessage(messageParts.join(" "));
     } catch (error) {
-      validPhotos.forEach((photo) => {
+      preparedUploads.forEach(({ photo }) => {
         URL.revokeObjectURL(photo.previewUrl);
         selectedSignaturesRef.current.delete(createFileSignature(photo.file));
       });
@@ -224,7 +268,7 @@ export function PhotoUploadPage() {
               <UploadIcon />
               {isPreparing ? "Preparing…" : "Upload"}
             </label>
-            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Up to 5 MB each · Up to 10 images per upload</p>
+            <p className="mt-3 text-xs text-neutral-500">JPG or PNG · Up to 5 MB each · Up to 10 images per upload · Face-free images skip recognition</p>
           </div>
         </div>
 

@@ -33,6 +33,7 @@ export interface PreparedAssetUpload {
   clientAssetId: string;
   originalFilename: string;
   buffer: Buffer;
+  recognitionRequested?: boolean;
 }
 
 export interface AssetIngestResult {
@@ -67,6 +68,7 @@ interface PreparedAsset {
   extension: StoredImageExtension;
   mimeType: AssetImageMimeType;
   originalFilename: string;
+  recognitionRequested: boolean;
   title: string;
 }
 
@@ -426,6 +428,7 @@ function prepareUpload(input: PreparedAssetUpload, index: number): PreparedAsset
     extension: image.extension,
     mimeType: image.mimeType,
     originalFilename,
+    recognitionRequested: input.recognitionRequested !== false,
     title: deriveTitle(originalFilename),
   };
 }
@@ -456,14 +459,22 @@ function createRecord(
       title: asset.title,
       updatedAt: timestamp,
     },
-    recognition: {
-      attemptNumber: 0,
-      availableAt: timestamp,
-      provider: recognitionProviderName,
-      queuedAt: timestamp,
-      revision: 1,
-      status: "QUEUED",
-    },
+    recognition: asset.recognitionRequested
+      ? {
+          attemptNumber: 0,
+          availableAt: timestamp,
+          provider: recognitionProviderName,
+          queuedAt: timestamp,
+          revision: 1,
+          status: "QUEUED",
+        }
+      : {
+          attemptNumber: 0,
+          completedAt: timestamp,
+          provider: recognitionProviderName,
+          revision: 1,
+          status: "SKIPPED",
+        },
     enrichment: {
       associations: [],
       hideFromSearch: false,

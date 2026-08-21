@@ -38,9 +38,9 @@ export interface AssetRecord {
   };
   recognition: {
     attemptNumber: number;
-    availableAt: Date;
+    availableAt?: Date;
     provider: RecognitionProviderName;
-    queuedAt: Date;
+    queuedAt?: Date;
     revision: number;
     status: AssetRecognitionStatus;
     completedAt?: Date;
